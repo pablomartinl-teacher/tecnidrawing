@@ -1,6 +1,6 @@
-=================================
-             MANUAL DE USUARIO - MOTOR CAD EDUCACIÓN PLÁSTICA
-=============================================================================
+
+                   MANUAL DE USUARIO - MOTOR CAD 
+
 
 Bienvenido al Motor CAD diseñado específicamente para Dibujo Técnico. 
 Este documento explica todas las funciones, herramientas y atajos para sacar 
