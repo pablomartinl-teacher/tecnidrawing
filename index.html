@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tecnidib - V4.6</title>
+    <title>TecniDib - V4.7</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -40,8 +40,10 @@
         .tool-btn.active { background-color: var(--accent); color: #fff; }
         .tool-btn.snap-active { background-color: #2e7d32; } 
 
-        #canvas-container { grid-area: canvas; background-color: var(--bg-app); display: flex; justify-content: center; align-items: center; overflow: auto; position: relative; }
-        #dibujo-svg { background-color: var(--canvas-bg); box-shadow: 0 4px 20px rgba(0,0,0,0.5); cursor: crosshair; touch-action: none; max-width: 95%; max-height: 95%; }
+        /* Contenedor preparado para scroll y zoom infinito sin romper UI */
+        #canvas-container { grid-area: canvas; background-color: var(--bg-app); display: flex; justify-content: center; align-items: center; overflow: auto; position: relative; padding: 20px;}
+        
+        #dibujo-svg { background-color: var(--canvas-bg); box-shadow: 0 4px 20px rgba(0,0,0,0.5); cursor: crosshair; touch-action: none; max-width: 95%; max-height: 95%; transition: width 0.1s ease-out; }
 
         #snap-indicator { fill: rgba(255,0,0,0.2); stroke: red; stroke-width: 1.5; opacity: 0; pointer-events: none; }
         .selection-rect { fill: rgba(0, 122, 204, 0.2); stroke: #007acc; stroke-dasharray: 4,4; stroke-width: 1; }
@@ -52,7 +54,15 @@
     <header id="topbar">
         <div style="display: flex; gap: 10px; align-items: center;">
             <button class="btn-action" onclick="App.changeCanvasSize()">📏 Tamaño Lámina</button>
-            <span id="canvas-label" style="font-weight: bold;">297 x 210 mm</span>
+            <span id="canvas-label" style="font-weight: bold; margin-right: 10px;">297 x 210 mm</span>
+            
+            <div style="border-left: 1px solid var(--border); height: 20px; margin: 0 5px;"></div>
+            
+            <!-- Controles de Zoom -->
+            <button class="btn-action" onclick="App.zoomCanvas(-15)" title="Alejar (Ctrl + Rueda Abajo)">➖</button>
+            <span id="zoom-label" style="font-weight: bold; width: 45px; text-align: center;">95%</span>
+            <button class="btn-action" onclick="App.zoomCanvas(15)" title="Acercar (Ctrl + Rueda Arriba)">➕</button>
+            
             <span id="save-status" style="margin-left: 10px; color: #888; font-size: 12px;"></span>
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
@@ -173,7 +183,9 @@
                 keyboardInput: "",
                 lastEvent: null,
                 lastPos: null,
-                ghostP2: null
+                ghostP2: null,
+                zoomLevel: 95, // Novedad: Control del Zoom Local
+                initialPinchDistance: null
             },
 
             snapTolerance: 4, 
@@ -212,6 +224,28 @@
                 });
             },
 
+            // --- Novedad: Motor de Zoom ---
+            zoomCanvas(delta) {
+                if (!this.state.zoomLevel) this.state.zoomLevel = 95;
+                this.state.zoomLevel = Math.max(20, Math.min(1000, this.state.zoomLevel + delta));
+                
+                this.svg.style.maxWidth = 'none';
+                this.svg.style.maxHeight = 'none';
+                this.svg.style.width = `${this.state.zoomLevel}%`;
+                
+                document.getElementById('zoom-label').innerText = `${this.state.zoomLevel}%`;
+                
+                // Evita recorte de scroll cuando es más grande que el contenedor
+                const container = document.getElementById('canvas-container');
+                if (this.state.zoomLevel > 100) {
+                    container.style.justifyContent = 'flex-start';
+                    container.style.alignItems = 'flex-start';
+                } else {
+                    container.style.justifyContent = 'center';
+                    container.style.alignItems = 'center';
+                }
+            },
+
             forceGhostUpdate() { if (this.state.lastEvent) this.onPointerMove(this.state.lastEvent); },
 
             applyKeyboardMeasure() {
@@ -230,13 +264,12 @@
                     this.state.referenceLine = null;
                     
                 } else if (this.state.tool === 'measure') {
-                    // Si se usa teclado en measure durante step 1, fija el punto 2
                     if(this.state.step === 1) {
                         dx = this.state.ghostP2.x - this.state.p1.x; dy = this.state.ghostP2.y - this.state.p1.y;
                         mag = Math.hypot(dx, dy); if (mag === 0) { dx = 1; dy = 0; mag = 1; }
                         this.state.p2 = { x: this.state.p1.x + (dx/mag)*val, y: this.state.p1.y + (dy/mag)*val };
                         this.state.step = 2; this.state.keyboardInput = ""; this.forceGhostUpdate();
-                        return; // Pasa a step 2
+                        return; 
                     }
                 } else if (this.state.tool === 'circle') {
                     this.data.push({ type: 'circle', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: val, style: sty });
@@ -466,6 +499,12 @@
             },
 
             onPointerDown(evt) {
+                // Interceptar zoom táctil rápido (Pinch to Zoom)
+                if (evt.touches && evt.touches.length === 2) {
+                    this.state.initialPinchDistance = Math.hypot(evt.touches[0].clientX - evt.touches[1].clientX, evt.touches[0].clientY - evt.touches[1].clientY);
+                    return;
+                }
+
                 const pos = this.getMousePos(evt);
                 
                 if (this.state.keyboardInput !== "") { this.applyKeyboardMeasure(); return; }
@@ -565,7 +604,6 @@
                         }
                         this.cancelAction();
                     } else if (this.state.step === 2 && this.state.tool === 'measure') {
-                        // 3º Clic de medida: Define en qué lado se dibuja
                         let dx = this.state.p2.x - this.state.p1.x, dy = this.state.p2.y - this.state.p1.y;
                         let mag = Math.hypot(dx, dy); let nx = 0, ny = 0; if (mag > 0) { nx = -dy/mag; ny = dx/mag; }
                         let dot = (pos.x - this.state.p1.x)*nx + (pos.y - this.state.p1.y)*ny;
@@ -614,16 +652,15 @@
                 }
             },
 
-            // --- Novedad: Creador de Cota Cortada ISO Matemático ---
             getRenderCota(p1x, p1y, p2x, p2y, s, dash, markStyle, distStr, opacity = "1.0", offsetDir = 1) {
                 let dx = p2x - p1x, dy = p2y - p1y; let mag = Math.hypot(dx, dy);
                 let nx = 0, ny = 0; if(mag > 0) { nx = -dy/mag; ny = dx/mag; }
                 
-                let off = 5 * offsetDir; // Distancia ISO 5mm
+                let off = 5 * offsetDir; 
                 let ox1 = p1x + nx * off, oy1 = p1y + ny * off;
                 let ox2 = p2x + nx * off, oy2 = p2y + ny * off;
                 
-                let extOff = off > 0 ? off + 2 : off - 2; // Líneas de referencia sobresalen 2mm
+                let extOff = off > 0 ? off + 2 : off - 2; 
                 let ext1 = `<line x1="${p1x}" y1="${p1y}" x2="${p1x + nx * extOff}" y2="${p1y + ny * extOff}" stroke="${s.color}" stroke-width="0.3" ${dash} opacity="${opacity}" />`;
                 let ext2 = `<line x1="${p2x}" y1="${p2y}" x2="${p2x + nx * extOff}" y2="${p2y + ny * extOff}" stroke="${s.color}" stroke-width="0.3" ${dash} opacity="${opacity}" />`;
                 
@@ -658,6 +695,16 @@
             },
 
             onPointerMove(evt) {
+                // Control Zoom Táctil
+                if (evt.touches && evt.touches.length === 2) {
+                    if (this.state.initialPinchDistance) {
+                        let newDist = Math.hypot(evt.touches[0].clientX - evt.touches[1].clientX, evt.touches[0].clientY - evt.touches[1].clientY);
+                        let delta = newDist - this.state.initialPinchDistance;
+                        if (Math.abs(delta) > 5) { this.zoomCanvas(delta > 0 ? 10 : -10); this.state.initialPinchDistance = newDist; }
+                    }
+                    return;
+                }
+
                 this.state.lastEvent = evt; 
                 const pos = this.getMousePos(evt);
                 this.state.lastPos = pos;
@@ -792,6 +839,28 @@
                 this.layerGhost.innerHTML = ghostContent + overlayText;
             },
 
+            onPointerUp(evt) {
+                if (evt.touches && evt.touches.length < 2) { this.state.initialPinchDistance = null; }
+                
+                if (!this.state.isDrawing) return;
+                if (['arc', 'curve', 'fill', 'line', 'measure', 'circle', 'polygon', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) return; 
+                
+                this.state.isDrawing = false;
+                if (this.state.tool === 'cursor') { this.state.dragPointIndex = -1; this.saveState(); return; }
+
+                if (this.state.tool === 'eraser') {
+                    let pos = this.getMousePos(evt);
+                    let minX = Math.min(this.state.p1.x, pos.x), maxX = Math.max(this.state.p1.x, pos.x);
+                    let minY = Math.min(this.state.p1.y, pos.y), maxY = Math.max(this.state.p1.y, pos.y);
+                    this.saveState();
+                    this.data = this.data.filter(e => {
+                        let x = e.x || e.cx || e.x1 || (e.points && e.points[0].x); let y = e.y || e.cy || e.y1 || (e.points && e.points[0].y);
+                        return !(x >= minX && x <= maxX && y >= minY && y <= maxY);
+                    });
+                    this.layerGhost.innerHTML = ''; this.renderAll();
+                }
+            },
+
             // --- RENDERIZADO FINAL ---
             renderAll() {
                 this.layerSolucion.innerHTML = '';
@@ -859,8 +928,8 @@
             redo() { if (this.redoHistory.length > 0) { this.history.push(JSON.stringify(this.data)); this.data = JSON.parse(this.redoHistory.pop()); this.cancelAction(); this.saveToStorage(); } },
             clearAll() { if(confirm("¿Borrar todo?")) { this.saveState(); this.data = []; document.getElementById('bg-pdf-image').removeAttribute('href'); this.cancelAction(); } },
             
-            saveToStorage() { localStorage.setItem('cad_model_v4_6', JSON.stringify({d: this.data, s: this.canvasSize})); },
-            loadFromStorage() { const s = localStorage.getItem('cad_model_v4_6'); if (s) { let p = JSON.parse(s); this.data = p.d; if(p.s) { this.canvasSize = p.s; this.updateCanvas(); } this.renderAll(); } },
+            saveToStorage() { localStorage.setItem('cad_model_v4_7', JSON.stringify({d: this.data, s: this.canvasSize})); },
+            loadFromStorage() { const s = localStorage.getItem('cad_model_v4_7'); if (s) { let p = JSON.parse(s); this.data = p.d; if(p.s) { this.canvasSize = p.s; this.updateCanvas(); } this.renderAll(); } },
 
             saveToFile() {
                 const blob = new Blob([JSON.stringify({data: this.data, size: this.canvasSize})], {type: "application/json"});
@@ -927,10 +996,20 @@
             bindEvents() {
                 this.svg.addEventListener('mousedown', (e) => this.onPointerDown(e));
                 this.svg.addEventListener('mousemove', (e) => this.onPointerMove(e));
+                this.svg.addEventListener('mouseup', (e) => this.onPointerUp(e));
                 this.svg.addEventListener('dblclick', (e) => this.onDoubleClick(e)); 
                 
                 this.svg.addEventListener('touchstart', (e) => { e.preventDefault(); this.onPointerDown(e); }, {passive: false});
                 this.svg.addEventListener('touchmove', (e) => { e.preventDefault(); this.onPointerMove(e); }, {passive: false});
+                this.svg.addEventListener('touchend', (e) => { e.preventDefault(); this.onPointerUp(e); }, {passive: false});
+                
+                // Novedad: Evento Rueda del Ratón para Zoom
+                document.getElementById('canvas-container').addEventListener('wheel', (e) => {
+                    if (e.ctrlKey) {
+                        e.preventDefault();
+                        this.zoomCanvas(e.deltaY < 0 ? 10 : -10);
+                    }
+                }, {passive: false});
             },
 
             bindUI() {
