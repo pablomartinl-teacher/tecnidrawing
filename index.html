@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Motor CAD Educación Plástica - V4.6</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
+    
+    <style>
+        :root { --bg-app: #1e1e1e; --bg-panel: #2d2d2d; --text-main: #ffffff; --accent: #007acc; --border: #444444; --canvas-bg: #f5f5f5; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; user-select: none; }
+        
+        body {
+            display: grid; grid-template-areas: "topbar topbar" "propbar propbar" "toolbar canvas";
+            grid-template-rows: 50px 40px 1fr; grid-template-columns: 60px 1fr;
+            height: 100vh; background-color: var(--bg-app); color: var(--text-main); overflow: hidden;
+        }
+
+        #topbar { grid-area: topbar; background-color: var(--bg-panel); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; }
+        #propbar { grid-area: propbar; background-color: #252525; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 15px; padding: 0 15px; font-size: 13px; }
+        
+        .btn-action { background: var(--accent); color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
+        .btn-action:hover { background: #005f9e; }
+        .btn-danger { background: #d32f2f; }
+        .btn-danger:hover { background: #b71c1c; }
+        .btn-success { background: #2e7d32; }
+        .btn-success:hover { background: #1b5e20; }
+        
+        select, input[type="number"] { background: #1e1e1e; color: white; border: 1px solid var(--border); padding: 4px; border-radius: 3px; }
+        input[type="color"] { cursor: pointer; border: none; background: transparent; height: 26px; width: 30px; padding: 0; }
+
+        #toolbar { grid-area: toolbar; background-color: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 5px; overflow-y: auto; }
+        
+        .tool-btn { width: 40px; height: 40px; border-radius: 6px; background: transparent; border: none; color: var(--text-main); cursor: pointer; display: flex; justify-content: center; align-items: center; }
+        .tool-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; pointer-events: none;}
+        .tool-btn:hover { background-color: var(--border); }
+        .tool-btn.active { background-color: var(--accent); color: #fff; }
+        .tool-btn.snap-active { background-color: #2e7d32; } 
+
+        #canvas-container { grid-area: canvas; background-color: var(--bg-app); display: flex; justify-content: center; align-items: center; overflow: auto; position: relative; }
+        #dibujo-svg { background-color: var(--canvas-bg); box-shadow: 0 4px 20px rgba(0,0,0,0.5); cursor: crosshair; touch-action: none; max-width: 95%; max-height: 95%; }
+
+        #snap-indicator { fill: rgba(255,0,0,0.2); stroke: red; stroke-width: 1.5; opacity: 0; pointer-events: none; }
+        .selection-rect { fill: rgba(0, 122, 204, 0.2); stroke: #007acc; stroke-dasharray: 4,4; stroke-width: 1; }
+    </style>
+</head>
+<body>
+
+    <header id="topbar">
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn-action" onclick="App.changeCanvasSize()">📏 Tamaño Lámina</button>
+            <span id="canvas-label" style="font-weight: bold;">297 x 210 mm</span>
+            <span id="save-status" style="margin-left: 10px; color: #888; font-size: 12px;"></span>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <span id="coords" style="color: var(--accent); font-family: monospace;">X: 0.0, Y: 0.0</span>
+            <button class="btn-action btn-success" onclick="App.generateMargins()">🔲 Márgenes</button>
+            <button class="btn-action" onclick="document.getElementById('pdf-upload').click()">📥 PDF Base</button>
+            <input type="file" id="pdf-upload" accept="application/pdf" style="display:none" onchange="App.importPDF(event)">
+            <button class="btn-action" onclick="App.saveToFile()">💾 Guardar</button>
+            <button class="btn-action" onclick="document.getElementById('json-upload').click()">📂 Cargar</button>
+            <input type="file" id="json-upload" accept=".json" style="display:none" onchange="App.loadFromFile(event)">
+            <button class="btn-action" onclick="App.undo()">↩</button>
+            <button class="btn-action" onclick="App.redo()">↪</button>
+            <button class="btn-action btn-danger" onclick="App.exportPDF()">📄 PDF</button>
+            <button class="btn-action btn-success" onclick="App.newCanvas()">📄 Nuevo Lienzo</button>
+        </div>
+    </header>
+
+    <div id="propbar">
+        <label title="Activar/Desactivar Imantado automático a vértices">
+            <button id="btn-snap" class="tool-btn snap-active" style="width: 30px; height: 30px;" onclick="App.toggleSnap()">
+                <svg viewBox="0 0 24 24"><path d="M4 10V6a4 4 0 0 1 8 0v4 M12 10V6a4 4 0 0 1 8 0v4 M4 10h4v4H4z M16 10h4v4h-4z"/></svg>
+            </button>
+        </label>
+        <div style="border-left: 1px solid var(--border); height: 20px; margin: 0 5px;"></div>
+        
+        <label>Línea: <input type="color" id="prop-color" value="#000000"></label>
+        <label>Fondo: <input type="color" id="prop-fill-color" value="#ffffff"></label>
+        <label>Grosor: <input type="number" id="prop-width" min="0" max="8" step="0.1" value="0.5" style="width: 50px;"></label>
+        <label>Trazo: 
+            <select id="prop-dash">
+                <option value="none">Continuo</option>
+                <option value="3,3">Discontinuo</option>
+                <option value="10,2,2,2">Raya-Punto (Ejes)</option>
+            </select>
+        </label>
+        <label>Acabado: 
+            <select id="prop-marker">
+                <option value="none">Ninguno</option>
+                <option value="arrow">Flechas</option>
+                <option value="tick">Líneas 45º</option>
+            </select>
+        </label>
+        <label id="poly-prop" style="display:none; color: var(--accent); font-weight:bold;">
+            Lados Polígono: <input type="number" id="prop-poly-sides" min="3" max="20" value="5" style="width: 45px;">
+        </label>
+    </div>
+
+    <aside id="toolbar">
+        <button class="tool-btn" data-tool="cursor" title="Seleccionar/Mover (Doble Clic para Editar, CTRL multiselección)"><svg viewBox="0 0 24 24"><path d="M5 4l14 10-5.5 1.5L16 21l-3-1-2.5-5.5L5 18z"/></svg></button>
+        <button class="tool-btn active" data-tool="line" title="Segmento (Usa Shift para Orto)"><svg viewBox="0 0 24 24"><line x1="4" y1="20" x2="20" y2="4"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg></button>
+        <button class="tool-btn" data-tool="measure" title="Acotar ISO (1º Inicio, 2º Fin, 3º Lado)"><svg viewBox="0 0 24 24"><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="9" x2="2" y2="15"/><line x1="22" y1="9" x2="22" y2="15"/><text x="12" y="9" font-size="5" text-anchor="middle" fill="currentColor" stroke="none">mm</text></svg></button>
+        <button class="tool-btn" data-tool="parallel" title="Paralela"><svg viewBox="0 0 24 24"><line x1="6" y1="22" x2="16" y2="2"/><line x1="10" y1="22" x2="20" y2="2"/></svg></button>
+        <button class="tool-btn" data-tool="perpendicular" title="Perpendicular"><svg viewBox="0 0 24 24"><line x1="2" y1="20" x2="22" y2="20"/><line x1="12" y1="20" x2="12" y2="4"/><rect x="12" y="15" width="5" height="5"/></svg></button>
+        <button class="tool-btn" data-tool="line_angle" title="Línea con Ángulo exacto"><svg viewBox="0 0 24 24"><line x1="2" y1="20" x2="22" y2="20"/><line x1="2" y1="20" x2="16" y2="6"/><path d="M 12 20 A 10 10 0 0 0 9 13"/></svg></button>
+        <button class="tool-btn" data-tool="circle" title="Circunferencia"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
+        <button class="tool-btn" data-tool="arc" title="Arco (Centro, Inicio, Fin)"><svg viewBox="0 0 24 24"><path d="M 4 12 A 8 8 0 0 1 20 12"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg></button>
+        <button class="tool-btn" data-tool="curve" title="Spline sobre puntos"><svg viewBox="0 0 24 24"><path d="M3 12 C 8 4, 16 20, 21 12"/><circle cx="3" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="21" cy="12" r="1.5"/></svg></button>
+        <button class="tool-btn" data-tool="polygon" title="Polígono Regular"><svg viewBox="0 0 24 24"><polygon points="12,2 22,9 18,21 6,21 2,9"/></svg></button>
+        <button class="tool-btn" data-tool="fill" title="Relleno (Rayado de piezas)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18"/><line x1="3" y1="18" x2="9" y2="24"/><line x1="3" y1="12" x2="15" y2="24"/><line x1="3" y1="6" x2="21" y2="24"/><line x1="9" y1="3" x2="24" y2="18"/></svg></button>
+        <button class="tool-btn" data-tool="point" title="Punto (Cruz)"><svg viewBox="0 0 24 24"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></button>
+        <button class="tool-btn" data-tool="text" title="Texto Libre"><svg viewBox="0 0 24 24"><path d="M4 6h16 M12 6v14 M10 20h4"/></svg></button>
+        <button class="tool-btn" data-tool="tag" title="Etiqueta Orientada"><svg viewBox="0 0 24 24"><path d="M12 2 L22 12 L12 22 L2 12 Z"/><circle cx="12" cy="12" r="2"/></svg></button>
+        <button class="tool-btn" data-tool="eraser" title="Borrador (Clic o Caja)"><svg viewBox="0 0 24 24"><path d="M18 13l-6 6-7-7 6-6M12 7l5 5 M3 21h18"/></svg></button>
+    </aside>
+
+    <main id="canvas-container">
+        <svg id="dibujo-svg" viewBox="0 0 297 210" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <marker id="arrow-end" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
+                </marker>
+                <marker id="arrow-start" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
+                </marker>
+                <marker id="tick" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <line x1="8" y1="2" x2="2" y2="8" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round"/>
+                </marker>
+                <pattern id="hatch" width="4" height="4" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                    <line x1="0" y1="0" x2="0" y2="4" stroke="currentColor" stroke-width="0.5" />
+                </pattern>
+            </defs>
+            <image id="bg-pdf-image" x="0" y="0" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></image>
+            <g id="layer-enunciado"></g>
+            <g id="layer-solucion"></g>
+            <g id="layer-ghost"></g>
+            <circle id="snap-indicator" r="3" cx="0" cy="0" />
+        </svg>
+    </main>
+
+    <script>
+        const App = {
+            svg: document.getElementById('dibujo-svg'),
+            layerSolucion: document.getElementById('layer-solucion'),
+            layerGhost: document.getElementById('layer-ghost'),
+            snapIndicator: document.getElementById('snap-indicator'),
+            coordDisplay: document.getElementById('coords'),
+            
+            data: [], 
+            history: [], 
+            redoHistory: [], 
+            intersections: [], 
+            
+            canvasSize: { w: 297, h: 210 },
+            config: { snapEnabled: true },
+            
+            state: {
+                tool: 'line',
+                isDrawing: false,
+                step: 0,          
+                p1: null,
+                p2: null,         
+                currentSnap: null,
+                referenceLine: null,
+                selectedEntities: [],
+                hoverEntity: null,     
+                dragPointIndex: -1,    
+                customAngle: 0,
+                keyboardInput: "",
+                lastEvent: null,
+                lastPos: null,
+                ghostP2: null
+            },
+
+            snapTolerance: 4, 
+
+            init() {
+                this.bindUI();
+                this.bindEvents();
+                this.loadFromStorage();
+                
+                window.addEventListener('keydown', (e) => {
+                    if (e.target.tagName === 'INPUT') return;
+                    
+                    if (this.state.isDrawing && ['line', 'measure', 'circle', 'polygon', 'arc', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                        if (/^[0-9\.]$/.test(e.key)) {
+                            this.state.keyboardInput += e.key; this.forceGhostUpdate(); return;
+                        }
+                        if (e.key === 'Backspace' && this.state.keyboardInput.length > 0) {
+                            this.state.keyboardInput = this.state.keyboardInput.slice(0, -1); this.forceGhostUpdate(); return;
+                        }
+                        if (e.key === 'Enter' && this.state.keyboardInput !== "") {
+                            this.applyKeyboardMeasure(); return;
+                        }
+                    }
+
+                    if (e.ctrlKey && e.key === 'z') this.undo();
+                    if (e.ctrlKey && e.key === 'y') this.redo();
+                    if (e.key === 'Escape') this.cancelAction();
+                    
+                    if ((e.key === 'Delete' || e.key === 'Backspace') && this.state.selectedEntities.length > 0) {
+                        this.saveState();
+                        let idsToRemove = this.state.selectedEntities.map(ent => ent.id);
+                        this.data = this.data.filter(ent => !idsToRemove.includes(ent.id));
+                        this.state.selectedEntities = [];
+                        this.renderAll();
+                    }
+                });
+            },
+
+            forceGhostUpdate() { if (this.state.lastEvent) this.onPointerMove(this.state.lastEvent); },
+
+            applyKeyboardMeasure() {
+                let val = parseFloat(this.state.keyboardInput);
+                if (isNaN(val) || val <= 0) { this.state.keyboardInput = ""; this.forceGhostUpdate(); return; }
+                
+                this.saveState();
+                let sty = this.getStyle(); let dx, dy, mag, finalX, finalY;
+
+                if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                    dx = this.state.ghostP2.x - this.state.p1.x; dy = this.state.ghostP2.y - this.state.p1.y;
+                    mag = Math.hypot(dx, dy); if (mag === 0) { dx = 1; dy = 0; mag = 1; }
+                    finalX = this.state.p1.x + (dx / mag) * val; finalY = this.state.p1.y + (dy / mag) * val;
+                    
+                    this.data.push({ type: 'line', id: Date.now(), x1: this.state.p1.x, y1: this.state.p1.y, x2: finalX, y2: finalY, style: sty });
+                    this.state.referenceLine = null;
+                    
+                } else if (this.state.tool === 'measure') {
+                    // Si se usa teclado en measure durante step 1, fija el punto 2
+                    if(this.state.step === 1) {
+                        dx = this.state.ghostP2.x - this.state.p1.x; dy = this.state.ghostP2.y - this.state.p1.y;
+                        mag = Math.hypot(dx, dy); if (mag === 0) { dx = 1; dy = 0; mag = 1; }
+                        this.state.p2 = { x: this.state.p1.x + (dx/mag)*val, y: this.state.p1.y + (dy/mag)*val };
+                        this.state.step = 2; this.state.keyboardInput = ""; this.forceGhostUpdate();
+                        return; // Pasa a step 2
+                    }
+                } else if (this.state.tool === 'circle') {
+                    this.data.push({ type: 'circle', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: val, style: sty });
+                } else if (this.state.tool === 'polygon') {
+                    let sides = parseInt(document.getElementById('prop-poly-sides').value) || 5;
+                    dx = this.state.ghostP2.x - this.state.p1.x; dy = this.state.ghostP2.y - this.state.p1.y;
+                    let ang = Math.atan2(dy, dx);
+                    this.data.push({ type: 'polygon', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: val, sides: sides, angle: ang, style: sty });
+                } else if (this.state.tool === 'arc') {
+                    if (this.state.step === 1) {
+                        dx = this.state.lastPos.x - this.state.p1.x; dy = this.state.lastPos.y - this.state.p1.y;
+                        mag = Math.hypot(dx, dy); if (mag === 0) { dx = 1; dy = 0; mag = 1; }
+                        this.state.p2 = { x: this.state.p1.x + (dx/mag)*val, y: this.state.p1.y + (dy/mag)*val };
+                        this.state.step = 2; this.state.keyboardInput = ""; this.forceGhostUpdate();
+                        return; 
+                    } else if (this.state.step === 2) {
+                        let r = Math.hypot(this.state.p2.x - this.state.p1.x, this.state.p2.y - this.state.p1.y);
+                        let start = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
+                        let end = start + (val * Math.PI / 180);
+                        this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: start, endAngle: end, style: sty });
+                    }
+                }
+
+                this.state.keyboardInput = "";
+                this.cancelAction();
+            },
+
+            newCanvas() {
+                if(confirm('¿Crear nuevo lienzo en blanco? Se perderá el trabajo no guardado.')) {
+                    this.saveState(); this.data = []; document.getElementById('bg-pdf-image').removeAttribute('href');
+                    this.cancelAction(); this.renderAll();
+                }
+            },
+
+            generateMargins() {
+                let mode = prompt("Generador de Márgenes:\n[1] Márgenes desde el papel (ej. 20mm izquierda)\n[2] Medida exacta Ancho x Alto", "1");
+                let x, y, rw, rh;
+                if (mode === "1") {
+                    let mTop = parseFloat(prompt("Margen Superior (mm):", "10")) || 10; let mBottom = parseFloat(prompt("Margen Inferior (mm):", "10")) || 10;
+                    let mLeft = parseFloat(prompt("Margen Izquierdo (mm):", "25")) || 25; let mRight = parseFloat(prompt("Margen Derecho (mm):", "10")) || 10;
+                    x = mLeft; y = mTop; rw = this.canvasSize.w - mLeft - mRight; rh = this.canvasSize.h - mTop - mBottom;
+                } else if (mode === "2") {
+                    rw = parseFloat(prompt("Ancho del recuadro (mm):", "277")) || 277; rh = parseFloat(prompt("Alto del recuadro (mm):", "190")) || 190;
+                    x = parseFloat(prompt("Distancia desde el borde izquierdo (X en mm):", "10")) || 10; y = parseFloat(prompt("Distancia desde el borde superior (Y en mm):", "10")) || 10;
+                } else { return; }
+                if (rw > 0 && rh > 0) {
+                    this.saveState(); let s = this.getStyle(); s.width = parseFloat(s.width) + 0.3;
+                    this.data.push({ type: 'rect', id: Date.now(), x: x, y: y, w: rw, h: rh, style: s });
+                    this.renderAll();
+                }
+            },
+
+            getStyle() {
+                return {
+                    width: document.getElementById('prop-width').value || 0.5,
+                    dash: document.getElementById('prop-dash').value,
+                    marker: document.getElementById('prop-marker').value,
+                    color: document.getElementById('prop-color').value || '#000000',
+                    fillColor: document.getElementById('prop-fill-color').value || '#ffffff'
+                };
+            },
+
+            toggleSnap() {
+                this.config.snapEnabled = !this.config.snapEnabled; const btn = document.getElementById('btn-snap');
+                if(this.config.snapEnabled) btn.classList.add('snap-active'); else btn.classList.remove('snap-active');
+                this.snapIndicator.style.opacity = 0;
+            },
+
+            updateIntersections() {
+                this.intersections = [];
+                let lines = this.data.filter(e => e.type === 'line' || e.type === 'measure');
+                for(let i=0; i<lines.length; i++) {
+                    for(let j=i+1; j<lines.length; j++) {
+                        let l1 = lines[i], l2 = lines[j];
+                        let d = (l1.x1 - l1.x2)*(l2.y1 - l2.y2) - (l1.y1 - l1.y2)*(l2.x1 - l2.x2);
+                        if (d === 0) continue;
+                        let t = ((l1.x1 - l2.x1)*(l2.y1 - l2.y2) - (l1.y1 - l2.y1)*(l2.x1 - l2.x2)) / d;
+                        let u = -((l1.x1 - l1.x2)*(l1.y1 - l2.y1) - (l1.y1 - l1.y2)*(l1.x1 - l2.x1)) / d;
+                        if (t >= -0.01 && t <= 1.01 && u >= -0.01 && u <= 1.01) {
+                            this.intersections.push({ x: l1.x1 + t*(l1.x2 - l1.x1), y: l1.y1 + t*(l1.y2 - l1.y1) });
+                        }
+                    }
+                }
+            },
+
+            distPointToSegment(M, A, B) {
+                let l2 = (B.x - A.x) ** 2 + (B.y - A.y) ** 2;
+                if (l2 === 0) return Math.hypot(M.x - A.x, M.y - A.y);
+                let t = ((M.x - A.x) * (B.x - A.x) + (M.y - A.y) * (B.y - A.y)) / l2;
+                t = Math.max(0, Math.min(1, t)); 
+                let projX = A.x + t * (B.x - A.x); let projY = A.y + t * (B.y - A.y);
+                return Math.hypot(M.x - projX, M.y - projY);
+            },
+
+            getHitEntity(x, y) {
+                let hit = null, minDist = 4; 
+                this.data.forEach(ent => {
+                    if (ent.type === 'line' || ent.type === 'measure') {
+                        let d = this.distPointToSegment({x, y}, {x: ent.x1, y: ent.y1}, {x: ent.x2, y: ent.y2});
+                        if (d < minDist) { minDist = d; hit = ent; }
+                    } else if (ent.type === 'rect') {
+                        let pts = [{x: ent.x, y: ent.y}, {x: ent.x + ent.w, y: ent.y}, {x: ent.x + ent.w, y: ent.y + ent.h}, {x: ent.x, y: ent.y + ent.h}];
+                        for (let i = 0; i < 4; i++) {
+                            let next = (i + 1) % 4; let d = this.distPointToSegment({x,y}, pts[i], pts[next]);
+                            if (d < minDist) { minDist = d; hit = ent; }
+                        }
+                    } else if (ent.type === 'circle' || ent.type === 'arc' || ent.type === 'polygon') {
+                        let d = Math.abs(Math.hypot(ent.cx - x, ent.cy - y) - ent.r);
+                        if (d < minDist) { minDist = d; hit = ent; }
+                    } else if (ent.type === 'point' || ent.type === 'text' || ent.type === 'tag') {
+                        if (Math.hypot(ent.x - x, ent.y - y) < 6) { hit = ent; minDist = 0; }
+                    } else if (ent.type === 'curve') {
+                        ent.points.forEach(p => { if (Math.hypot(p.x - x, p.y - y) < 8) { hit = ent; minDist = 0; }});
+                    } else if (ent.type === 'fill') {
+                        for (let i = 0; i < ent.points.length; i++) {
+                            let next = (i + 1) % ent.points.length; let d = this.distPointToSegment({x,y}, ent.points[i], ent.points[next]);
+                            if (d < minDist) { minDist = d; hit = ent; }
+                        }
+                    }
+                });
+                return hit;
+            },
+
+            smoothPath(points) {
+                if (points.length < 2) return '';
+                if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+                let path = `M ${points[0].x} ${points[0].y}`;
+                for (let i = 0; i < points.length - 1; i++) {
+                    let p0 = i > 0 ? points[i - 1] : points[i];
+                    let p1 = points[i]; let p2 = points[i + 1];
+                    let p3 = i !== points.length - 2 ? points[i + 2] : p2;
+                    let cp1x = p1.x + (p2.x - p0.x) / 6; let cp1y = p1.y + (p2.y - p0.y) / 6;
+                    let cp2x = p2.x - (p3.x - p1.x) / 6; let cp2y = p2.y - (p3.y - p1.y) / 6;
+                    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+                }
+                return path;
+            },
+
+            getSvgArcPath(cx, cy, r, startAngle, endAngle) {
+                let p1x = cx + r * Math.cos(startAngle), p1y = cy + r * Math.sin(startAngle);
+                let p2x = cx + r * Math.cos(endAngle), p2y = cy + r * Math.sin(endAngle);
+                let delta = endAngle - startAngle;
+                if (delta < 0) delta += 2 * Math.PI; 
+                let largeArc = delta > Math.PI ? 1 : 0; 
+                return `M ${p1x} ${p1y} A ${r} ${r} 0 ${largeArc} 1 ${p2x} ${p2y}`;
+            },
+
+            cancelAction() {
+                this.state.isDrawing = false; this.state.step = 0; this.state.referenceLine = null;
+                this.state.selectedEntities = []; this.state.dragPointIndex = -1; this.state.keyboardInput = "";
+                this.layerGhost.innerHTML = ''; this.renderAll();
+            },
+
+            calculateSnap(x, y) {
+                if (!this.config.snapEnabled) { this.snapIndicator.style.opacity = 0; return {x, y}; }
+
+                let bestSnap = null, minDistance = this.snapTolerance;
+                
+                this.data.forEach(ent => {
+                    if (ent.type === 'line' || ent.type === 'measure') {
+                        let d1 = Math.hypot(ent.x1 - x, ent.y1 - y); if (d1 < minDistance) { minDistance = d1; bestSnap = {x: ent.x1, y: ent.y1}; }
+                        let d2 = Math.hypot(ent.x2 - x, ent.y2 - y); if (d2 < minDistance) { minDistance = d2; bestSnap = {x: ent.x2, y: ent.y2}; }
+                        let mx = (ent.x1 + ent.x2) / 2, my = (ent.y1 + ent.y2) / 2; let dm = Math.hypot(mx - x, my - y);
+                        if (dm < minDistance) { minDistance = dm; bestSnap = {x: mx, y: my}; }
+                    } else if (ent.type === 'rect') {
+                        let pts = [{x: ent.x, y: ent.y}, {x: ent.x + ent.w, y: ent.y}, {x: ent.x + ent.w, y: ent.y + ent.h}, {x: ent.x, y: ent.y + ent.h}];
+                        pts.forEach(p => { let dp = Math.hypot(p.x - x, p.y - y); if (dp < minDistance) { minDistance = dp; bestSnap = p; } });
+                    } else if (ent.type === 'point' || ent.type === 'curve' || ent.type === 'fill') {
+                        let pts = (ent.type === 'point') ? [ent] : ent.points;
+                        pts.forEach(p => { let dp = Math.hypot(p.x - x, p.y - y); if (dp < minDistance) { minDistance = dp; bestSnap = p; } });
+                    } else if (ent.type === 'circle') {
+                        let dc = Math.hypot(ent.cx - x, ent.cy - y); if (dc < minDistance) { minDistance = dc; bestSnap = {x: ent.cx, y: ent.cy}; }
+                    } else if (ent.type === 'polygon') {
+                        let dc = Math.hypot(ent.cx - x, ent.cy - y); if (dc < minDistance) { minDistance = dc; bestSnap = {x: ent.cx, y: ent.cy}; }
+                        for(let i=0; i<ent.sides; i++) {
+                            let a = ent.angle + (i * 2 * Math.PI / ent.sides); let p = {x: ent.cx + ent.r * Math.cos(a), y: ent.cy + ent.r * Math.sin(a)};
+                            let dp = Math.hypot(p.x - x, p.y - y); if (dp < minDistance) { minDistance = dp; bestSnap = p; }
+                        }
+                    } else if (ent.type === 'arc') {
+                        let dc = Math.hypot(ent.cx - x, ent.cy - y); if (dc < minDistance) { minDistance = dc; bestSnap = {x: ent.cx, y: ent.cy}; }
+                        let px1 = ent.cx + ent.r * Math.cos(ent.startAngle); let py1 = ent.cy + ent.r * Math.sin(ent.startAngle);
+                        let px2 = ent.cx + ent.r * Math.cos(ent.endAngle); let py2 = ent.cy + ent.r * Math.sin(ent.endAngle);
+                        [{x: px1, y: py1}, {x: px2, y: py2}].forEach(p => { let dp = Math.hypot(p.x - x, p.y - y); if (dp < minDistance) { minDistance = dp; bestSnap = p; } });
+                    }
+                });
+                
+                this.intersections.forEach(p => {
+                    let dp = Math.hypot(p.x - x, p.y - y);
+                    if (dp < minDistance) { minDistance = dp; bestSnap = p; }
+                });
+                
+                if (bestSnap) {
+                    this.snapIndicator.setAttribute('cx', bestSnap.x); this.snapIndicator.setAttribute('cy', bestSnap.y);
+                    this.snapIndicator.style.opacity = 1;
+                } else { this.snapIndicator.style.opacity = 0; }
+                
+                return bestSnap ? bestSnap : {x, y};
+            },
+
+            getMousePos(evt) {
+                const CTM = this.svg.getScreenCTM();
+                let clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+                let clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+                let rawX = (clientX - CTM.e) / CTM.a; let rawY = (clientY - CTM.f) / CTM.d;
+                return this.calculateSnap(rawX, rawY);
+            },
+
+            onDoubleClick(evt) {
+                if (this.state.tool !== 'cursor') return;
+                const pos = this.getMousePos(evt);
+                let hit = this.getHitEntity(pos.x, pos.y);
+                if (hit) {
+                    this.saveState();
+                    if (hit.type === 'text' || hit.type === 'tag') {
+                        let t = prompt("Editar texto:", hit.text); if (t !== null) hit.text = t;
+                    }
+                    let nc = prompt("Color de línea (Hex o nombre):", hit.style.color);
+                    if (nc !== null) hit.style.color = nc;
+                    let nw = prompt("Grosor de línea (mm):", hit.style.width);
+                    if (nw !== null && !isNaN(parseFloat(nw))) hit.style.width = parseFloat(nw);
+                    if (hit.type === 'fill' || hit.type === 'rect') {
+                        let nf = prompt("Color de fondo/relleno:", hit.style.fillColor);
+                        if (nf !== null) hit.style.fillColor = nf;
+                    }
+                    this.renderAll();
+                }
+            },
+
+            onPointerDown(evt) {
+                const pos = this.getMousePos(evt);
+                
+                if (this.state.keyboardInput !== "") { this.applyKeyboardMeasure(); return; }
+                
+                if (this.state.tool === 'cursor') {
+                    let hit = this.getHitEntity(pos.x, pos.y);
+                    if (hit) {
+                        if (evt.ctrlKey) {
+                            let idx = this.state.selectedEntities.findIndex(e => e.id === hit.id);
+                            if (idx > -1) this.state.selectedEntities.splice(idx, 1);
+                            else this.state.selectedEntities.push(hit);
+                        } else {
+                            if (!this.state.selectedEntities.find(e => e.id === hit.id)) this.state.selectedEntities = [hit];
+                        }
+                        this.state.p1 = pos; this.state.isDrawing = true;
+
+                        if (this.state.selectedEntities.length === 1 && hit.type === 'curve') {
+                            hit.points.forEach((p, idx) => { if (Math.hypot(p.x - pos.x, p.y - pos.y) < 6) this.state.dragPointIndex = idx; });
+                        } else { this.state.dragPointIndex = -1; }
+                        this.renderAll();
+                    } else { if (!evt.ctrlKey) this.cancelAction(); }
+                    return;
+                }
+
+                if (this.state.tool === 'eraser') {
+                    let hit = this.getHitEntity(pos.x, pos.y);
+                    if (hit) { this.saveState(); this.data = this.data.filter(e => e.id !== hit.id); this.renderAll(); } 
+                    else { this.state.p1 = pos; this.state.isDrawing = true; }
+                    return;
+                }
+
+                if (this.state.tool === 'text') {
+                    let t = prompt("Introduce el texto:");
+                    if (t) { this.saveState(); this.data.push({ type: 'text', id: Date.now(), x: pos.x, y: pos.y, text: t, style: this.getStyle() }); this.renderAll(); }
+                    return;
+                }
+                if (this.state.tool === 'tag') {
+                    let hit = this.getHitEntity(pos.x, pos.y); let angle = 0;
+                    if (hit && (hit.type === 'line' || hit.type === 'measure')) angle = Math.atan2(hit.y2 - hit.y1, hit.x2 - hit.x1) * 180 / Math.PI;
+                    let t = prompt("Introduce la etiqueta (se alineará automáticamente):");
+                    if (t) { this.saveState(); this.data.push({ type: 'tag', id: Date.now(), x: pos.x, y: pos.y, text: t, angle: angle, style: this.getStyle() }); this.renderAll(); }
+                    return;
+                }
+                if (this.state.tool === 'point') {
+                    this.saveState(); this.data.push({ type: 'point', id: Date.now(), x: pos.x, y: pos.y, style: this.getStyle() }); this.renderAll();
+                    return;
+                }
+
+                if (['line', 'measure', 'circle', 'polygon', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                    
+                    if (['parallel', 'perpendicular', 'line_angle'].includes(this.state.tool) && !this.state.referenceLine) {
+                        let hit = this.getHitEntity(pos.x, pos.y);
+                        if (hit && (hit.type === 'line' || hit.type === 'measure')) { 
+                            this.state.referenceLine = hit; 
+                            if(this.state.tool === 'line_angle') {
+                                let ang = prompt("Introduce el ángulo exacto en grados (Ej: 45):");
+                                if(ang !== null) this.state.customAngle = parseFloat(ang) * Math.PI / 180;
+                                else this.state.referenceLine = null;
+                            }
+                            this.renderAll(); 
+                        }
+                        return; 
+                    }
+
+                    if (this.state.step === 0) {
+                        this.state.p1 = pos; this.state.step = 1; this.state.isDrawing = true;
+                    } else if (this.state.step === 1) {
+                        let finalX = pos.x, finalY = pos.y;
+                        if (evt.shiftKey && (this.state.tool === 'line' || this.state.tool === 'measure')) {
+                            let dx = Math.abs(pos.x - this.state.p1.x); let dy = Math.abs(pos.y - this.state.p1.y);
+                            if (dx > dy) finalY = this.state.p1.y; else finalX = this.state.p1.x;
+                        }
+                        const ghostElement = this.layerGhost.firstChild;
+                        if (ghostElement && ghostElement.tagName === 'line') {
+                            finalX = parseFloat(ghostElement.getAttribute('x2')); finalY = parseFloat(ghostElement.getAttribute('y2'));
+                        }
+                        if(finalX === this.state.p1.x && finalY === this.state.p1.y) return;
+
+                        if (this.state.tool === 'measure') {
+                            this.state.p2 = {x: finalX, y: finalY};
+                            this.state.step = 2; // Pasa al paso 3: Elegir el lado de la cota
+                            return;
+                        }
+
+                        this.saveState(); let sty = this.getStyle();
+
+                        if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                            this.data.push({ type: 'line', id: Date.now(), x1: this.state.p1.x, y1: this.state.p1.y, x2: finalX, y2: finalY, style: sty });
+                        } else if (this.state.tool === 'circle') {
+                            let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
+                            this.data.push({ type: 'circle', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, style: sty });
+                        } else if (this.state.tool === 'polygon') {
+                            let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
+                            let sides = parseInt(document.getElementById('prop-poly-sides').value) || 5;
+                            let ang = Math.atan2(finalY - this.state.p1.y, finalX - this.state.p1.x);
+                            this.data.push({ type: 'polygon', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, sides: sides, angle: ang, style: sty });
+                        }
+                        this.cancelAction();
+                    } else if (this.state.step === 2 && this.state.tool === 'measure') {
+                        // 3º Clic de medida: Define en qué lado se dibuja
+                        let dx = this.state.p2.x - this.state.p1.x, dy = this.state.p2.y - this.state.p1.y;
+                        let mag = Math.hypot(dx, dy); let nx = 0, ny = 0; if (mag > 0) { nx = -dy/mag; ny = dx/mag; }
+                        let dot = (pos.x - this.state.p1.x)*nx + (pos.y - this.state.p1.y)*ny;
+                        let dir = dot >= 0 ? 1 : -1;
+                        
+                        this.saveState();
+                        this.data.push({ type: 'measure', id: Date.now(), x1: this.state.p1.x, y1: this.state.p1.y, x2: this.state.p2.x, y2: this.state.p2.y, offsetDir: dir, style: this.getStyle() });
+                        this.cancelAction();
+                    }
+                    return;
+                }
+
+                if (this.state.tool === 'curve') {
+                    if (this.state.step === 0) { this.state.p1 = [pos]; this.state.step = 1; this.state.isDrawing = true; } 
+                    else {
+                        let lastPt = this.state.p1[this.state.p1.length - 1];
+                        if (Math.hypot(pos.x - lastPt.x, pos.y - lastPt.y) < 3) {
+                            this.saveState(); this.data.push({ type: 'curve', id: Date.now(), points: [...this.state.p1], style: this.getStyle() }); this.cancelAction();
+                        } else { this.state.p1.push(pos); }
+                    }
+                    return;
+                }
+
+                if (this.state.tool === 'arc') {
+                    if (this.state.step === 0) { this.state.p1 = pos; this.state.step = 1; this.state.isDrawing = true; } 
+                    else if (this.state.step === 1) { this.state.p2 = pos; this.state.step = 2; } 
+                    else if (this.state.step === 2) {
+                        this.saveState();
+                        let r = Math.hypot(this.state.p2.x - this.state.p1.x, this.state.p2.y - this.state.p1.y);
+                        let start = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
+                        let end = Math.atan2(pos.y - this.state.p1.y, pos.x - this.state.p1.x);
+                        this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: start, endAngle: end, style: this.getStyle() });
+                        this.cancelAction();
+                    }
+                    return;
+                }
+
+                if (this.state.tool === 'fill') {
+                    if (this.state.step === 0) { this.state.p1 = [pos]; this.state.step = 1; this.state.isDrawing = true; } 
+                    else {
+                        if (Math.hypot(pos.x - this.state.p1[0].x, pos.y - this.state.p1[0].y) < 6 && this.state.p1.length > 2) {
+                            this.saveState(); this.data.push({ type: 'fill', id: Date.now(), points: [...this.state.p1], style: this.getStyle() }); this.cancelAction();
+                        } else { this.state.p1.push(pos); }
+                    }
+                    return;
+                }
+            },
+
+            // --- Novedad: Creador de Cota Cortada ISO Matemático ---
+            getRenderCota(p1x, p1y, p2x, p2y, s, dash, markStyle, distStr, opacity = "1.0", offsetDir = 1) {
+                let dx = p2x - p1x, dy = p2y - p1y; let mag = Math.hypot(dx, dy);
+                let nx = 0, ny = 0; if(mag > 0) { nx = -dy/mag; ny = dx/mag; }
+                
+                let off = 5 * offsetDir; // Distancia ISO 5mm
+                let ox1 = p1x + nx * off, oy1 = p1y + ny * off;
+                let ox2 = p2x + nx * off, oy2 = p2y + ny * off;
+                
+                let extOff = off > 0 ? off + 2 : off - 2; // Líneas de referencia sobresalen 2mm
+                let ext1 = `<line x1="${p1x}" y1="${p1y}" x2="${p1x + nx * extOff}" y2="${p1y + ny * extOff}" stroke="${s.color}" stroke-width="0.3" ${dash} opacity="${opacity}" />`;
+                let ext2 = `<line x1="${p2x}" y1="${p2y}" x2="${p2x + nx * extOff}" y2="${p2y + ny * extOff}" stroke="${s.color}" stroke-width="0.3" ${dash} opacity="${opacity}" />`;
+                
+                let forcedMark = markStyle === '' ? `marker-end="url(#arrow-end)" marker-start="url(#arrow-start)"` : markStyle;
+                
+                let midX = (ox1 + ox2) / 2, midY = (oy1 + oy2) / 2;
+                let textAng = Math.atan2(dy, dx) * 180 / Math.PI;
+                if (textAng > 90 || textAng <= -90) { textAng += 180; }
+                
+                let sw = parseFloat(s.width) || 0.5;
+                let fontSize = Math.max(4, sw * 3);
+                let textStr = distStr;
+                if (!textStr.includes('mm')) textStr += ' mm';
+                
+                let gapHalf = (textStr.length * fontSize * 0.3) + 1.5; 
+                let ux = 0, uy = 0; if(mag > 0) { ux = dx/mag; uy = dy/mag; }
+                
+                let dimLine = '';
+                if (mag > gapHalf * 2.2) {
+                    let gx1 = midX - ux * gapHalf, gy1 = midY - uy * gapHalf;
+                    let gx2 = midX + ux * gapHalf, gy2 = midY + uy * gapHalf;
+                    let markStart = forcedMark.match(/marker-start="([^"]+)"/) ? `marker-start="${forcedMark.match(/marker-start="([^"]+)"/)[1]}"` : '';
+                    let markEnd = forcedMark.match(/marker-end="([^"]+)"/) ? `marker-end="${forcedMark.match(/marker-end="([^"]+)"/)[1]}"` : '';
+                    dimLine += `<line x1="${ox1}" y1="${oy1}" x2="${gx1}" y2="${gy1}" stroke="${s.color}" stroke-width="${sw}" ${markStart} opacity="${opacity}" />`;
+                    dimLine += `<line x1="${gx2}" y1="${gy2}" x2="${ox2}" y2="${oy2}" stroke="${s.color}" stroke-width="${sw}" ${markEnd} opacity="${opacity}" />`;
+                } else {
+                    dimLine = `<line x1="${ox1}" y1="${oy1}" x2="${ox2}" y2="${oy2}" stroke="${s.color}" stroke-width="${sw}" ${forcedMark} opacity="${opacity}" />`;
+                }
+
+                let text = `<text x="${midX}" y="${midY + fontSize * 0.3}" fill="${s.color}" font-size="${fontSize}" font-family="monospace" text-anchor="middle" transform="rotate(${textAng}, ${midX}, ${midY})" opacity="${opacity}">${textStr}</text>`;
+                return ext1 + ext2 + dimLine + text;
+            },
+
+            onPointerMove(evt) {
+                this.state.lastEvent = evt; 
+                const pos = this.getMousePos(evt);
+                this.state.lastPos = pos;
+                this.coordDisplay.innerText = `X: ${pos.x.toFixed(1)}, Y: ${pos.y.toFixed(1)}`;
+
+                if (!this.state.isDrawing && this.state.tool === 'cursor') {
+                    let hit = this.getHitEntity(pos.x, pos.y);
+                    if (this.state.hoverEntity !== hit) { this.state.hoverEntity = hit; this.renderAll(); }
+                }
+
+                if (!this.state.isDrawing) return;
+
+                if (this.state.tool === 'cursor' && this.state.selectedEntities.length > 0) {
+                    if (this.state.dragPointIndex !== -1 && this.state.selectedEntities[0].type === 'curve') {
+                        this.state.selectedEntities[0].points[this.state.dragPointIndex] = pos;
+                    } else {
+                        let dx = pos.x - this.state.p1.x; let dy = pos.y - this.state.p1.y;
+                        this.state.p1 = pos; 
+                        this.state.selectedEntities.forEach(e => {
+                            if(e.type === 'line' || e.type === 'measure') { e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; }
+                            else if(e.type === 'rect') { e.x+=dx; e.y+=dy; }
+                            else if(e.type === 'circle' || e.type === 'arc' || e.type === 'polygon') { e.cx+=dx; e.cy+=dy; }
+                            else if(e.type === 'point' || e.type === 'text' || e.type === 'tag') { e.x+=dx; e.y+=dy; }
+                            else if(e.type === 'curve' || e.type === 'fill') { e.points.forEach(p => { p.x+=dx; p.y+=dy; }); }
+                        });
+                    }
+                    this.renderAll();
+                    return;
+                }
+
+                if (this.state.tool === 'eraser') {
+                    let minX = Math.min(this.state.p1.x, pos.x), maxX = Math.max(this.state.p1.x, pos.x);
+                    let minY = Math.min(this.state.p1.y, pos.y), maxY = Math.max(this.state.p1.y, pos.y);
+                    this.layerGhost.innerHTML = `<rect x="${minX}" y="${minY}" width="${maxX-minX}" height="${maxY-minY}" class="selection-rect" />`;
+                    return;
+                }
+
+                let p2x = pos.x, p2y = pos.y;
+                
+                if (evt.shiftKey && (this.state.tool === 'line' || this.state.tool === 'measure' && this.state.step === 1)) {
+                    let dx = Math.abs(pos.x - this.state.p1.x); let dy = Math.abs(pos.y - this.state.p1.y);
+                    if (dx > dy) p2y = this.state.p1.y; else p2x = this.state.p1.x;
+                }
+
+                if (['parallel', 'perpendicular', 'line_angle'].includes(this.state.tool) && this.state.referenceLine) {
+                    let vx = this.state.referenceLine.x2 - this.state.referenceLine.x1;
+                    let vy = this.state.referenceLine.y2 - this.state.referenceLine.y1;
+                    if (this.state.tool === 'perpendicular') { let t = vx; vx = -vy; vy = t; }
+                    else if (this.state.tool === 'line_angle') {
+                        let a = this.state.customAngle;
+                        let tx = vx * Math.cos(a) - vy * Math.sin(a); let ty = vx * Math.sin(a) + vy * Math.cos(a);
+                        vx = tx; vy = ty;
+                    }
+                    let mag = Math.hypot(vx, vy); let ux = vx / mag, uy = vy / mag;
+                    let dot = (pos.x - this.state.p1.x) * ux + (pos.y - this.state.p1.y) * uy;
+                    p2x = this.state.p1.x + dot * ux; p2y = this.state.p1.y + dot * uy;
+                }
+
+                this.state.ghostP2 = { x: p2x, y: p2y };
+
+                let s = this.getStyle(); let dash = s.dash !== 'none' ? `stroke-dasharray="${s.dash}"` : '';
+                let markStyle = '';
+                if (s.marker === 'arrow') markStyle = `marker-end="url(#arrow-end)" marker-start="url(#arrow-start)"`;
+                else if (s.marker === 'tick') markStyle = `marker-end="url(#tick)" marker-start="url(#tick)"`;
+
+                let ghostContent = ''; let overlayText = ''; 
+                let kInput = this.state.keyboardInput;
+                let kDistStr = kInput !== "" ? kInput + "_" : Math.hypot(p2x - this.state.p1.x, p2y - this.state.p1.y).toFixed(1);
+
+                if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                    ghostContent = `<line x1="${this.state.p1.x}" y1="${this.state.p1.y}" x2="${p2x}" y2="${p2y}" stroke="${s.color}" stroke-width="${s.width}" opacity="0.7" ${dash} ${markStyle}/>`;
+                    let midX = (this.state.p1.x + p2x) / 2, midY = (this.state.p1.y + p2y) / 2;
+                    let textAng = Math.atan2(p2y - this.state.p1.y, p2x - this.state.p1.x) * 180 / Math.PI;
+                    if (textAng > 90 || textAng <= -90) textAng += 180; 
+                    overlayText = `<text x="${midX}" y="${midY - 2}" fill="#007acc" font-size="4" font-family="monospace" text-anchor="middle" transform="rotate(${textAng}, ${midX}, ${midY})">${kDistStr} mm</text>`;
+
+                } else if (this.state.tool === 'measure') {
+                    if (this.state.step === 1) {
+                        ghostContent = `<line x1="${this.state.p1.x}" y1="${this.state.p1.y}" x2="${p2x}" y2="${p2y}" stroke="${s.color}" stroke-dasharray="2,2" stroke-width="0.5" opacity="0.7"/>`;
+                        let midX = (this.state.p1.x + p2x) / 2, midY = (this.state.p1.y + p2y) / 2;
+                        let textAng = Math.atan2(p2y - this.state.p1.y, p2x - this.state.p1.x) * 180 / Math.PI;
+                        if (textAng > 90 || textAng <= -90) textAng += 180; 
+                        overlayText = `<text x="${midX}" y="${midY - 2}" fill="#007acc" font-size="4" font-family="monospace" text-anchor="middle" transform="rotate(${textAng}, ${midX}, ${midY})">${kDistStr} mm</text>`;
+                    } else if (this.state.step === 2) {
+                        let dx = this.state.p2.x - this.state.p1.x, dy = this.state.p2.y - this.state.p1.y;
+                        let mag = Math.hypot(dx, dy); let nx = 0, ny = 0; if (mag > 0) { nx = -dy/mag; ny = dx/mag; }
+                        let dot = (pos.x - this.state.p1.x)*nx + (pos.y - this.state.p1.y)*ny;
+                        let dir = dot >= 0 ? 1 : -1;
+                        let distStr = kInput !== "" ? kInput : mag.toFixed(1);
+                        ghostContent = this.getRenderCota(this.state.p1.x, this.state.p1.y, this.state.p2.x, this.state.p2.y, s, dash, markStyle, distStr, "0.7", dir);
+                    }
+                } else if (this.state.tool === 'circle') {
+                    let rNum = kInput !== "" ? parseFloat(kInput) || 0 : Math.hypot(p2x - this.state.p1.x, p2y - this.state.p1.y);
+                    ghostContent = `<line x1="${this.state.p1.x}" y1="${this.state.p1.y}" x2="${p2x}" y2="${p2y}" stroke="#aaa" stroke-dasharray="2,4" stroke-width="0.5"/>
+                                    <circle cx="${this.state.p1.x}" cy="${this.state.p1.y}" r="${rNum}" stroke="${s.color}" fill="none" stroke-width="${s.width}" opacity="0.7" ${dash}/>`;
+                    overlayText = `<text x="${this.state.p1.x + rNum/2}" y="${this.state.p1.y - 2}" fill="#007acc" font-size="4" font-family="monospace" text-anchor="middle">R: ${kDistStr} mm</text>`;
+
+                } else if (this.state.tool === 'polygon') {
+                    let rNum = kInput !== "" ? parseFloat(kInput) || 0 : Math.hypot(p2x - this.state.p1.x, p2y - this.state.p1.y);
+                    let sides = parseInt(document.getElementById('prop-poly-sides').value) || 5;
+                    let ang = Math.atan2(p2y - this.state.p1.y, p2x - this.state.p1.x); let pts = [];
+                    for(let i=0; i<sides; i++) { let a = ang + (i * 2 * Math.PI / sides); pts.push(`${this.state.p1.x + rNum * Math.cos(a)},${this.state.p1.y + rNum * Math.sin(a)}`); }
+                    ghostContent = `<polygon points="${pts.join(' ')}" stroke="${s.color}" fill="none" stroke-width="${s.width}" opacity="0.7" ${dash}/>`;
+                    overlayText = `<text x="${this.state.p1.x + rNum/2}" y="${this.state.p1.y - 2}" fill="#007acc" font-size="4" font-family="monospace" text-anchor="middle">R: ${kDistStr} mm</text>`;
+
+                } else if (this.state.tool === 'arc') {
+                    if (this.state.step === 1) {
+                        let rNum = kInput !== "" ? parseFloat(kInput) || 0 : Math.hypot(pos.x - this.state.p1.x, pos.y - this.state.p1.y);
+                        ghostContent = `<circle cx="${this.state.p1.x}" cy="${this.state.p1.y}" r="${rNum}" stroke="#aaa" stroke-dasharray="2,4" fill="none" stroke-width="0.5"/><line x1="${this.state.p1.x}" y1="${this.state.p1.y}" x2="${pos.x}" y2="${pos.y}" stroke="${s.color}" stroke-dasharray="2,2" stroke-width="0.5"/>`;
+                        overlayText = `<text x="${this.state.p1.x + rNum/2}" y="${this.state.p1.y - 2}" fill="#007acc" font-size="4" font-family="monospace" text-anchor="middle">R: ${kDistStr} mm</text>`;
+                    } else if (this.state.step === 2) {
+                        let r = Math.hypot(this.state.p2.x - this.state.p1.x, this.state.p2.y - this.state.p1.y);
+                        let startAngle = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
+                        let endAngle = Math.atan2(pos.y - this.state.p1.y, pos.x - this.state.p1.x);
+                        
+                        let degrees = (endAngle - startAngle) * 180 / Math.PI; if (degrees < 0) degrees += 360;
+                        let kDegStr = kInput !== "" ? kInput + "_" : degrees.toFixed(1);
+                        if(kInput !== "") endAngle = startAngle + (parseFloat(kInput) * Math.PI / 180 || 0);
+
+                        let pathData = this.getSvgArcPath(this.state.p1.x, this.state.p1.y, r, startAngle, endAngle);
+                        ghostContent = `<circle cx="${this.state.p1.x}" cy="${this.state.p1.y}" r="${r}" stroke="#aaa" stroke-dasharray="2,4" fill="none" stroke-width="0.5"/><path d="${pathData}" stroke="${s.color}" fill="none" stroke-width="${s.width}"/><line x1="${this.state.p1.x}" y1="${this.state.p1.y}" x2="${pos.x}" y2="${pos.y}" stroke="${s.color}" stroke-dasharray="1,2" stroke-width="0.3" opacity="0.5"/>`;
+                        overlayText = `<text x="${pos.x}" y="${pos.y - 3}" fill="#007acc" font-size="4" font-family="monospace">${kDegStr}º</text>`;
+                    }
+                } else if (this.state.tool === 'curve') {
+                    let ptsStr = this.state.p1.map(p=>`${p.x},${p.y}`).join(' ');
+                    ghostContent = `<polyline points="${ptsStr} ${pos.x},${pos.y}" fill="none" stroke="${s.color}" stroke-dasharray="2,2" stroke-width="0.5"/>`;
+                } else if (this.state.tool === 'fill') {
+                    let pts = this.state.p1.map(p=>`${p.x},${p.y}`).join(' ');
+                    ghostContent = `<polyline points="${pts} ${pos.x},${pos.y}" fill="none" stroke="${s.color}" stroke-dasharray="2,2"/>`;
+                }
+                
+                this.layerGhost.innerHTML = ghostContent + overlayText;
+            },
+
+            // --- RENDERIZADO FINAL ---
+            renderAll() {
+                this.layerSolucion.innerHTML = '';
+                this.updateIntersections(); 
+                
+                this.data.forEach(ent => {
+                    let isRef = (this.state.referenceLine && this.state.referenceLine.id === ent.id);
+                    let isSelected = this.state.selectedEntities.some(se => se.id === ent.id);
+                    let isHover = (this.state.hoverEntity && this.state.hoverEntity.id === ent.id) || isSelected;
+                    
+                    let s = ent.style || { width: 0.5, color: '#000', dash: 'none', marker: 'none', fillColor: '#ffffff' };
+                    let color = isRef || isHover ? '#007acc' : s.color;
+                    let sw = isRef || isHover ? parseFloat(s.width) + 1 : s.width;
+                    let dash = s.dash !== 'none' ? `stroke-dasharray="${s.dash}"` : '';
+                    
+                    let markStyle = '';
+                    if (s.marker === 'arrow') markStyle = `marker-end="url(#arrow-end)" marker-start="url(#arrow-start)"`;
+                    else if (s.marker === 'tick') markStyle = `marker-end="url(#tick)" marker-start="url(#tick)"`;
+
+                    if (ent.type === 'line') {
+                        this.layerSolucion.innerHTML += `<line x1="${ent.x1}" y1="${ent.y1}" x2="${ent.x2}" y2="${ent.y2}" stroke="${color}" stroke-width="${sw}" ${dash} ${markStyle}/>`;
+                        this.layerSolucion.innerHTML += `<circle cx="${ent.x1}" cy="${ent.y1}" r="0.5" fill="${color}" /><circle cx="${ent.x2}" cy="${ent.y2}" r="0.5" fill="${color}" />`;
+                        
+                    } else if (ent.type === 'measure') {
+                        let distStr = Math.hypot(ent.x2 - ent.x1, ent.y2 - ent.y1).toFixed(1);
+                        this.layerSolucion.innerHTML += this.getRenderCota(ent.x1, ent.y1, ent.x2, ent.y2, s, dash, markStyle, distStr, "1.0", ent.offsetDir);
+
+                    } else if (ent.type === 'rect') {
+                        this.layerSolucion.innerHTML += `<rect x="${ent.x}" y="${ent.y}" width="${ent.w}" height="${ent.h}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
+                    } else if (ent.type === 'circle') {
+                        this.layerSolucion.innerHTML += `<circle cx="${ent.cx}" cy="${ent.cy}" r="${ent.r}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
+                        this.layerSolucion.innerHTML += `<line x1="${ent.cx-4}" y1="${ent.cy}" x2="${ent.cx+4}" y2="${ent.cy}" stroke="${color}" stroke-width="0.3"/><line x1="${ent.cx}" y1="${ent.cy-4}" x2="${ent.cx}" y2="${ent.cy+4}" stroke="${color}" stroke-width="0.3"/>`;
+                    } else if (ent.type === 'polygon') {
+                        let pts = [];
+                        for(let i=0; i<ent.sides; i++) {
+                            let a = ent.angle + (i * 2 * Math.PI / ent.sides);
+                            pts.push(`${ent.cx + ent.r * Math.cos(a)},${ent.cy + ent.r * Math.sin(a)}`);
+                        }
+                        this.layerSolucion.innerHTML += `<polygon points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
+                    } else if (ent.type === 'arc') {
+                        let pathData = this.getSvgArcPath(ent.cx, ent.cy, ent.r, ent.startAngle, ent.endAngle);
+                        this.layerSolucion.innerHTML += `<path d="${pathData}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
+                    } else if (ent.type === 'curve') {
+                        let pathData = this.smoothPath(ent.points);
+                        this.layerSolucion.innerHTML += `<path d="${pathData}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
+                        if (isSelected && this.state.tool === 'cursor') {
+                            ent.points.forEach(p => this.layerSolucion.innerHTML += `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="#007acc" stroke-width="1.5" />`);
+                        }
+                    } else if (ent.type === 'point') {
+                        this.layerSolucion.innerHTML += `<line x1="${ent.x-3}" y1="${ent.y}" x2="${ent.x+3}" y2="${ent.y}" stroke="${color}" stroke-width="${sw}"/><line x1="${ent.x}" y1="${ent.y-3}" x2="${ent.x}" y2="${ent.y+3}" stroke="${color}" stroke-width="${sw}"/>`;
+                    } else if (ent.type === 'text') {
+                        this.layerSolucion.innerHTML += `<text x="${ent.x}" y="${ent.y}" fill="${color}" font-size="${Math.max(4, sw*4)}" font-family="sans-serif">${ent.text}</text>`;
+                    } else if (ent.type === 'tag') {
+                        this.layerSolucion.innerHTML += `<text x="${ent.x}" y="${ent.y}" fill="${color}" font-size="${Math.max(4, sw*4)}" font-family="sans-serif" transform="rotate(${ent.angle}, ${ent.x}, ${ent.y})">${ent.text}</text>`;
+                    } else if (ent.type === 'fill') {
+                        let pts = ent.points.map(p=>`${p.x},${p.y}`).join(' ');
+                        let defs = `<defs><pattern id="pat-${ent.id}" width="6" height="6" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="${s.fillColor}" /><line x1="0" y1="0" x2="0" y2="6" stroke="${color}" stroke-width="${sw}" /></pattern></defs>`;
+                        this.layerSolucion.innerHTML += `${defs}<polygon points="${pts}" fill="url(#pat-${ent.id})" stroke="${color}" stroke-width="${sw}"/>`;
+                    }
+                });
+            },
+
+            saveState() { this.history.push(JSON.stringify(this.data)); this.redoHistory = []; this.saveToStorage(); },
+            undo() { if (this.history.length > 0) { this.redoHistory.push(JSON.stringify(this.data)); this.data = JSON.parse(this.history.pop()); this.cancelAction(); this.saveToStorage(); } },
+            redo() { if (this.redoHistory.length > 0) { this.history.push(JSON.stringify(this.data)); this.data = JSON.parse(this.redoHistory.pop()); this.cancelAction(); this.saveToStorage(); } },
+            clearAll() { if(confirm("¿Borrar todo?")) { this.saveState(); this.data = []; document.getElementById('bg-pdf-image').removeAttribute('href'); this.cancelAction(); } },
+            
+            saveToStorage() { localStorage.setItem('cad_model_v4_6', JSON.stringify({d: this.data, s: this.canvasSize})); },
+            loadFromStorage() { const s = localStorage.getItem('cad_model_v4_6'); if (s) { let p = JSON.parse(s); this.data = p.d; if(p.s) { this.canvasSize = p.s; this.updateCanvas(); } this.renderAll(); } },
+
+            saveToFile() {
+                const blob = new Blob([JSON.stringify({data: this.data, size: this.canvasSize})], {type: "application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'Lamina_Educacion_Plastica.json'; a.click();
+            },
+            loadFromFile(evt) {
+                const file = evt.target.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    let p = JSON.parse(e.target.result); this.saveState(); this.data = p.data;
+                    if(p.size) { this.canvasSize = p.size; this.updateCanvas(); }
+                    this.renderAll();
+                }; reader.readAsText(file);
+            },
+
+            changeCanvasSize() {
+                let w = prompt("Ancho en mm:", this.canvasSize.w); let h = prompt("Alto en mm:", this.canvasSize.h);
+                if (w && h) { this.canvasSize = { w: parseFloat(w), h: parseFloat(h) }; this.updateCanvas(); this.saveToStorage(); }
+            },
+            updateCanvas() {
+                this.svg.setAttribute('viewBox', `0 0 ${this.canvasSize.w} ${this.canvasSize.h}`);
+                document.getElementById('canvas-label').innerText = `${this.canvasSize.w} x ${this.canvasSize.h} mm`;
+            },
+
+            importPDF(evt) {
+                const file = evt.target.files[0]; if (!file || file.type !== "application/pdf") return alert("Selecciona un PDF.");
+                const reader = new FileReader();
+                reader.onload = function() {
+                    const typedarray = new Uint8Array(this.result);
+                    pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+                        pdf.getPage(1).then(page => {
+                            const viewport = page.getViewport({scale: 3});
+                            const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
+                            page.render({canvasContext: canvas.getContext('2d'), viewport: viewport}).promise.then(() => {
+                                document.getElementById('bg-pdf-image').setAttribute('href', canvas.toDataURL('image/png'));
+                            });
+                        });
+                    });
+                }; reader.readAsArrayBuffer(file);
+            },
+
+            exportPDF() {
+                const { jsPDF } = window.jspdf;
+                let orientation = this.canvasSize.w > this.canvasSize.h ? 'l' : 'p';
+                const doc = new jsPDF(orientation, 'mm', [this.canvasSize.w, this.canvasSize.h]);
+                
+                this.snapIndicator.style.opacity = 0; this.state.hoverEntity = null; this.state.selectedEntities = []; this.renderAll();
+                
+                const xml = new XMLSerializer().serializeToString(this.svg);
+                const svg64 = btoa(unescape(encodeURIComponent(xml)));
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas'); const scale = 4;
+                    canvas.width = this.canvasSize.w * scale; canvas.height = this.canvasSize.h * scale;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    doc.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, this.canvasSize.w, this.canvasSize.h);
+                    doc.save("Lamina_Resuelta.pdf");
+                }; img.src = 'data:image/svg+xml;base64,' + svg64;
+            },
+
+            bindEvents() {
+                this.svg.addEventListener('mousedown', (e) => this.onPointerDown(e));
+                this.svg.addEventListener('mousemove', (e) => this.onPointerMove(e));
+                this.svg.addEventListener('dblclick', (e) => this.onDoubleClick(e)); 
+                
+                this.svg.addEventListener('touchstart', (e) => { e.preventDefault(); this.onPointerDown(e); }, {passive: false});
+                this.svg.addEventListener('touchmove', (e) => { e.preventDefault(); this.onPointerMove(e); }, {passive: false});
+            },
+
+            bindUI() {
+                const tools = document.querySelectorAll('.tool-btn[data-tool]');
+                tools.forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        tools.forEach(t => t.classList.remove('active')); btn.classList.add('active');
+                        this.cancelAction(); this.state.tool = btn.dataset.tool;
+                        document.getElementById('poly-prop').style.display = this.state.tool === 'polygon' ? 'inline-block' : 'none';
+                    });
+                });
+            }
+        };
+
+        window.onload = () => App.init();
+    </script>
+</body>
+</html>
