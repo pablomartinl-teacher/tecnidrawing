@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TecniDib - V4.9</title>
+    <title>TecniDib - V4.10</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -50,6 +50,12 @@
         #edit-modal h3 { margin-bottom: 15px; color: var(--accent); font-size: 16px; }
         #edit-fields { display: flex; flex-direction: column; gap: 12px; }
         #edit-fields label { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+
+        /* Novedad: Modal de Recorte Integrado */
+        #crop-modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 2000; justify-content: center; align-items: center; flex-direction: column; }
+        #crop-container { position: relative; background: #222; border: 2px solid #555; max-width: 90vw; max-height: 75vh; overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,1); }
+        #crop-canvas { cursor: crosshair; display: block; }
+        .crop-controls { margin-top: 20px; display: flex; gap: 15px; }
     </style>
 </head>
 <body>
@@ -66,9 +72,17 @@
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
             <span id="coords" style="color: var(--accent); font-family: monospace;">X: 0.0, Y: 0.0</span>
+            
             <button class="btn-action btn-success" onclick="App.generateMargins()">🔲 Márgenes</button>
-            <button class="btn-action" onclick="document.getElementById('pdf-upload').click()">📥 PDF Base</button>
+            
+            <!-- Botón Nativo PDF -->
+            <button class="btn-action" onclick="document.getElementById('pdf-upload').click()" title="Carga un PDF como fondo completo">📥 PDF Base</button>
             <input type="file" id="pdf-upload" accept="application/pdf" style="display:none" onchange="App.importPDF(event)">
+            
+            <!-- Novedad: Botón de Recorte (Imágenes y PDF) -->
+            <button class="btn-action" onclick="document.getElementById('crop-upload').click()" style="background: #e67e22;" title="Sube una Imagen o PDF para recortar un trozo y pegarlo">✂️ Añadir Recorte</button>
+            <input type="file" id="crop-upload" accept="image/*,application/pdf" style="display:none" onchange="App.handleCropFile(event)">
+
             <button class="btn-action" onclick="App.saveToFile()">💾 Guardar</button>
             <button class="btn-action" onclick="document.getElementById('json-upload').click()">📂 Cargar</button>
             <input type="file" id="json-upload" accept=".json" style="display:none" onchange="App.loadFromFile(event)">
@@ -158,6 +172,18 @@
                 <button class="btn-action btn-success" onclick="App.saveEditModal()">Guardar</button>
             </div>
         </div>
+        
+        <!-- Novedad: Modal de Recorte -->
+        <div id="crop-modal">
+            <h3 style="color: white; margin-bottom: 10px; font-size: 20px;">Dibuja un rectángulo para recortar</h3>
+            <div id="crop-container">
+                <canvas id="crop-canvas"></canvas>
+            </div>
+            <div class="crop-controls">
+                <button class="btn-action btn-danger" onclick="App.closeCropper()">Cancelar</button>
+                <button class="btn-action btn-success" onclick="App.confirmCrop()">✂️ Recortar y Añadir</button>
+            </div>
+        </div>
     </main>
 
     <script>
@@ -197,7 +223,11 @@
                 editingEntity: null,
                 arcStartAngle: 0,
                 arcCurrentAngle: 0,
-                arcSweepAngle: 0
+                arcSweepAngle: 0,
+                
+                // Cropper State
+                cropImage: null,
+                cropRect: null
             },
 
             snapTolerance: 4, 
@@ -205,6 +235,7 @@
             init() {
                 this.bindUI();
                 this.bindEvents();
+                this.initCropEvents(); // Novedad: Inicia los eventos del modal de recorte
                 this.loadFromStorage();
                 
                 window.addEventListener('keydown', (e) => {
@@ -229,7 +260,11 @@
 
                     if (e.ctrlKey && e.key === 'z') this.undo();
                     if (e.ctrlKey && e.key === 'y') this.redo();
-                    if (e.key === 'Escape') this.cancelAction();
+                    if (e.key === 'Escape') {
+                        if(document.getElementById('crop-modal').style.display === 'flex') { this.closeCropper(); return; }
+                        if(document.getElementById('edit-modal').style.display === 'block') { this.closeEditModal(); return; }
+                        this.cancelAction();
+                    }
                     
                     if ((e.key === 'Delete' || e.key === 'Backspace') && this.state.selectedEntities.length > 0) {
                         this.saveState();
@@ -240,6 +275,154 @@
                     }
                 });
             },
+
+            // --- NOVEDAD: MÓDULO DE RECORTE (IMÁGENES Y PDF) ---
+            handleCropFile(evt) {
+                const file = evt.target.files[0];
+                if (!file) return;
+                
+                if (file.type === "application/pdf") {
+                    const reader = new FileReader();
+                    reader.onload = function() {
+                        const typedarray = new Uint8Array(this.result);
+                        pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+                            pdf.getPage(1).then(page => {
+                                const viewport = page.getViewport({scale: 3}); // Alta calidad
+                                const canvas = document.createElement('canvas');
+                                canvas.width = viewport.width; canvas.height = viewport.height;
+                                page.render({canvasContext: canvas.getContext('2d'), viewport: viewport}).promise.then(() => {
+                                    App.openCropper(canvas.toDataURL('image/png'));
+                                });
+                            });
+                        });
+                    };
+                    reader.readAsArrayBuffer(file);
+                } else if (file.type.startsWith("image/")) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => this.openCropper(e.target.result);
+                    reader.readAsDataURL(file);
+                }
+                evt.target.value = ""; // Resetea el input para poder subir el mismo archivo otra vez
+            },
+
+            openCropper(dataUrl) {
+                this.state.cropImage = new Image();
+                this.state.cropImage.onload = () => {
+                    const c = document.getElementById('crop-canvas');
+                    c.width = this.state.cropImage.width;
+                    c.height = this.state.cropImage.height;
+                    this.state.cropRect = null;
+                    this.drawCropCanvas();
+                    document.getElementById('crop-modal').style.display = 'flex';
+                };
+                this.state.cropImage.src = dataUrl;
+            },
+
+            closeCropper() {
+                document.getElementById('crop-modal').style.display = 'none';
+                this.state.cropImage = null;
+                this.state.cropRect = null;
+            },
+
+            drawCropCanvas() {
+                const c = document.getElementById('crop-canvas');
+                const ctx = c.getContext('2d');
+                ctx.clearRect(0, 0, c.width, c.height);
+                ctx.drawImage(this.state.cropImage, 0, 0);
+                
+                if (this.state.cropRect) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillRect(0, 0, c.width, c.height);
+                    
+                    let cr = this.state.cropRect;
+                    ctx.clearRect(cr.x, cr.y, cr.w, cr.h);
+                    ctx.drawImage(this.state.cropImage, cr.x, cr.y, cr.w, cr.h, cr.x, cr.y, cr.w, cr.h);
+                    
+                    ctx.strokeStyle = '#007acc';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([10, 10]);
+                    ctx.strokeRect(cr.x, cr.y, cr.w, cr.h);
+                    ctx.setLineDash([]);
+                }
+            },
+
+            initCropEvents() {
+                const c = document.getElementById('crop-canvas');
+                let isDragging = false;
+                let start = {x: 0, y: 0};
+                
+                c.addEventListener('mousedown', (e) => {
+                    const rect = c.getBoundingClientRect();
+                    const scaleX = c.width / rect.width;
+                    const scaleY = c.height / rect.height;
+                    start.x = (e.clientX - rect.left) * scaleX;
+                    start.y = (e.clientY - rect.top) * scaleY;
+                    isDragging = true;
+                    this.state.cropRect = {x: start.x, y: start.y, w: 0, h: 0};
+                });
+                
+                c.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    const rect = c.getBoundingClientRect();
+                    const scaleX = c.width / rect.width;
+                    const scaleY = c.height / rect.height;
+                    let curX = (e.clientX - rect.left) * scaleX;
+                    let curY = (e.clientY - rect.top) * scaleY;
+                    
+                    this.state.cropRect = {
+                        x: Math.min(start.x, curX),
+                        y: Math.min(start.y, curY),
+                        w: Math.abs(curX - start.x),
+                        h: Math.abs(curY - start.y)
+                    };
+                    this.drawCropCanvas();
+                });
+                
+                c.addEventListener('mouseup', () => { isDragging = false; });
+            },
+
+            confirmCrop() {
+                if (!this.state.cropRect || this.state.cropRect.w === 0 || this.state.cropRect.h === 0) {
+                    return alert('Por favor, haz clic y arrastra para dibujar el área que quieres recortar.');
+                }
+                
+                const tempC = document.createElement('canvas');
+                tempC.width = this.state.cropRect.w;
+                tempC.height = this.state.cropRect.h;
+                const ctx = tempC.getContext('2d');
+                ctx.drawImage(this.state.cropImage, this.state.cropRect.x, this.state.cropRect.y, this.state.cropRect.w, this.state.cropRect.h, 0, 0, this.state.cropRect.w, this.state.cropRect.h);
+                
+                const dataUrl = tempC.toDataURL('image/png');
+                
+                // Calculamos un tamaño inicial en milímetros aproximado (escala relativa)
+                let displayW = this.state.cropRect.w * 0.15;
+                let displayH = this.state.cropRect.h * 0.15;
+                
+                // Si es excesivamente grande para el folio, lo reducimos
+                if (displayW > this.canvasSize.w * 0.8) {
+                    let ratio = displayW / displayH;
+                    displayW = this.canvasSize.w * 0.8;
+                    displayH = displayW / ratio;
+                }
+                
+                this.saveState();
+                this.data.push({
+                    type: 'image',
+                    id: Date.now(),
+                    x: 20, // Lo pega arriba a la izquierda
+                    y: 20,
+                    width: displayW,
+                    height: displayH,
+                    href: dataUrl
+                });
+                
+                this.closeCropper();
+                this.renderAll();
+                
+                // Autoseleccionar la herramienta de mover para que el usuario sepa que puede arrastrarlo
+                document.querySelector('.tool-btn[data-tool="cursor"]').click();
+            },
+            // --- FIN MÓDULO RECORTE ---
 
             zoomCanvas(delta) {
                 if (!this.state.zoomLevel) this.state.zoomLevel = 95;
@@ -410,6 +593,11 @@
                             let next = (i + 1) % ent.points.length; let d = this.distPointToSegment({x,y}, ent.points[i], ent.points[next]);
                             if (d < minDist) { minDist = d; hit = ent; }
                         }
+                    } else if (ent.type === 'image') {
+                        // Novedad: Detección de colisión para Imágenes
+                        if (x >= ent.x && x <= ent.x + ent.width && y >= ent.y && y <= ent.y + ent.height) {
+                            hit = ent; minDist = 0;
+                        }
                     }
                 });
                 return hit;
@@ -478,6 +666,13 @@
                         let px1 = ent.cx + ent.r * Math.cos(ent.startAngle); let py1 = ent.cy + ent.r * Math.sin(ent.startAngle);
                         let px2 = ent.cx + ent.r * Math.cos(endA); let py2 = ent.cy + ent.r * Math.sin(endA);
                         [{x: px1, y: py1}, {x: px2, y: py2}].forEach(p => { let dp = Math.hypot(p.x - x, p.y - y); if (dp < minDistance) { minDistance = dp; bestSnap = p; } });
+                    } else if (ent.type === 'image') {
+                        // Snapping a las 4 esquinas de la imagen
+                        let pts = [
+                            {x: ent.x, y: ent.y}, {x: ent.x + ent.width, y: ent.y}, 
+                            {x: ent.x, y: ent.y + ent.height}, {x: ent.x + ent.width, y: ent.y + ent.height}
+                        ];
+                        pts.forEach(p => { let dp = Math.hypot(p.x - x, p.y - y); if (dp < minDistance) { minDistance = dp; bestSnap = p; } });
                     }
                 });
                 
@@ -515,6 +710,10 @@
                     fields.innerHTML += `<label>Tamaño (mm): <input type="number" step="0.5" id="edit-size" value="${ent.fontSize || Math.max(4, s.width*4)}" style="width:60px;"></label>`;
                     fields.innerHTML += `<label>Fuente: <select id="edit-font"><option value="sans-serif" ${ent.fontFamily==='sans-serif'?'selected':''}>Sans-Serif</option><option value="serif" ${ent.fontFamily==='serif'?'selected':''}>Serif</option><option value="monospace" ${ent.fontFamily==='monospace'?'selected':''}>Monospace</option></select></label>`;
                     fields.innerHTML += `<label>Color: <input type="color" id="edit-color" value="${s.color}"></label>`;
+                } else if (ent.type === 'image') {
+                    // Edición exclusiva para Imágenes (Cambio de tamaño)
+                    fields.innerHTML += `<label>Ancho (mm): <input type="number" step="1" id="edit-width" value="${ent.width.toFixed(1)}" style="width:60px;"></label>`;
+                    fields.innerHTML += `<p style="font-size:11px; color:#aaa; margin-top:5px;">El alto se ajustará automáticamente.</p>`;
                 } else {
                     fields.innerHTML += `<label>Color Línea: <input type="color" id="edit-color" value="${s.color}"></label>`;
                     fields.innerHTML += `<label>Grosor (mm): <input type="number" step="0.1" id="edit-width" value="${s.width}" style="width:60px;"></label>`;
@@ -543,6 +742,13 @@
                     ent.fontSize = parseFloat(document.getElementById('edit-size').value);
                     ent.fontFamily = document.getElementById('edit-font').value;
                     ent.style.color = document.getElementById('edit-color').value;
+                } else if (ent.type === 'image') {
+                    let newW = parseFloat(document.getElementById('edit-width').value);
+                    if (!isNaN(newW) && newW > 0) {
+                        let ratio = ent.height / ent.width;
+                        ent.width = newW;
+                        ent.height = newW * ratio;
+                    }
                 } else {
                     ent.style.color = document.getElementById('edit-color').value;
                     ent.style.width = parseFloat(document.getElementById('edit-width').value);
@@ -702,7 +908,6 @@
                     return;
                 }
 
-                // --- NOVEDAD: ARCOS CON SWEEP ACCUMULADO DINÁMICO ---
                 if (this.state.tool === 'arc') {
                     if (this.state.step === 0) { 
                         this.state.p1 = pos; 
@@ -809,9 +1014,11 @@
                         this.state.selectedEntities.forEach(e => {
                             if(e.type === 'line' || e.type === 'measure') { e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; }
                             else if(e.type === 'rect') { e.x+=dx; e.y+=dy; }
-                            else if(e.type === 'circle' || e.type === 'arc' || e.type === 'polygon') { e.cx+=dx; e.cy+=dy; }
+                            else if(e.type === 'circle' || e.type === 'polygon') { e.cx+=dx; e.cy+=dy; }
+                            else if(e.type === 'arc') { e.cx+=dx; e.cy+=dy; }
                             else if(e.type === 'point' || e.type === 'text' || e.type === 'tag') { e.x+=dx; e.y+=dy; }
                             else if(e.type === 'curve' || e.type === 'fill') { e.points.forEach(p => { p.x+=dx; p.y+=dy; }); }
+                            else if(e.type === 'image') { e.x+=dx; e.y+=dy; } // Novedad: Arrastrar imagen
                         });
                     }
                     this.renderAll();
@@ -900,8 +1107,6 @@
                         overlayText = `<text x="${this.state.p1.x + rNum/2}" y="${this.state.p1.y - 2}" fill="#007acc" font-size="4" font-family="monospace" text-anchor="middle">R: ${kDistStr} mm</text>`;
                     } else if (this.state.step === 2) {
                         let r = Math.hypot(this.state.p2.x - this.state.p1.x, this.state.p2.y - this.state.p1.y);
-                        
-                        // Novedad Arc Lógica Dinámica Acumulada
                         let currAngle = Math.atan2(pos.y - this.state.p1.y, pos.x - this.state.p1.x);
                         if (kInput === "") {
                             let diff = currAngle - this.state.arcCurrentAngle;
@@ -976,7 +1181,13 @@
                     if (s.marker === 'arrow') markStyle = `marker-end="url(#arrow-end)" marker-start="url(#arrow-start)"`;
                     else if (s.marker === 'tick') markStyle = `marker-end="url(#tick)" marker-start="url(#tick)"`;
 
-                    if (ent.type === 'line') {
+                    // Novedad: Renderizado Imagen
+                    if (ent.type === 'image') {
+                        this.layerSolucion.innerHTML += `<image x="${ent.x}" y="${ent.y}" width="${ent.width}" height="${ent.height}" href="${ent.href}" opacity="${isSelected || isHover ? 0.7 : 1}" />`;
+                        if (isSelected || isHover) {
+                            this.layerSolucion.innerHTML += `<rect x="${ent.x}" y="${ent.y}" width="${ent.width}" height="${ent.height}" fill="none" stroke="#007acc" stroke-width="1" stroke-dasharray="4,4"/>`;
+                        }
+                    } else if (ent.type === 'line') {
                         this.layerSolucion.innerHTML += `<line x1="${ent.x1}" y1="${ent.y1}" x2="${ent.x2}" y2="${ent.y2}" stroke="${color}" stroke-width="${sw}" ${dash} ${markStyle}/>`;
                     } else if (ent.type === 'measure') {
                         let distStr = Math.hypot(ent.x2 - ent.x1, ent.y2 - ent.y1).toFixed(1);
@@ -1022,8 +1233,8 @@
             redo() { if (this.redoHistory.length > 0) { this.history.push(JSON.stringify(this.data)); this.data = JSON.parse(this.redoHistory.pop()); this.cancelAction(); this.saveToStorage(); } },
             clearAll() { if(confirm("¿Borrar todo?")) { this.saveState(); this.data = []; document.getElementById('bg-pdf-image').removeAttribute('href'); this.cancelAction(); } },
             
-            saveToStorage() { localStorage.setItem('cad_model_v4_9', JSON.stringify({d: this.data, s: this.canvasSize})); },
-            loadFromStorage() { const s = localStorage.getItem('cad_model_v4_9'); if (s) { let p = JSON.parse(s); this.data = p.d; if(p.s) { this.canvasSize = p.s; this.updateCanvas(); } this.renderAll(); } },
+            saveToStorage() { localStorage.setItem('cad_model_v4_10', JSON.stringify({d: this.data, s: this.canvasSize})); },
+            loadFromStorage() { const s = localStorage.getItem('cad_model_v4_10'); if (s) { let p = JSON.parse(s); this.data = p.d; if(p.s) { this.canvasSize = p.s; this.updateCanvas(); } this.renderAll(); } },
 
             saveToFile() {
                 const blob = new Blob([JSON.stringify({data: this.data, size: this.canvasSize})], {type: "application/json"});
