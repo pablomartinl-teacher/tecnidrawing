@@ -7,7 +7,8 @@
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 ![Licencia](https://img.shields.io/badge/Licencia-Open_Source-success?style=for-the-badge)
 
-Una aplicación web de Dibujo Técnico y Diseño Asistido por Ordenador (CAD) diseñada específicamente para la docencia en Educación Plástica y Visual. Se ejecuta de forma nativa en el navegador, sin necesidad de instalación ni bases de datos, permitiendo trabajar en pizarras digitales, ordenadores, tablets y exportar los resultados a formato PDF a escala exacta 1:1.
+Una aplicación web de Dibujo Técnico y Diseño Asistido por Ordenador (CAD) diseñada específicamente para la docencia en Educación Plástica y Visual. Se ejecuta de forma nativa en el navegador, sin necesidad de instalación ni bases de datos, permitiendo trabajar en pizarras digitales, ordenadores, tablets y exportar los resultados a formato PDF a escala exacta 1:1. 
+ https://pablomartinl-teacher.github.io/tecnidrawing/
 
 ---
 
