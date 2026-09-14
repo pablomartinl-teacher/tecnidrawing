@@ -1,135 +1,106 @@
 ![Badge](https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2Fpablomartinl-teacher%2Ftecnidrawing&label=&icon=github&color=%23198754&message=&style=flat&tz=Europe%2FMadrid)
 
-                   MANUAL DE USUARIO - MOTOR CAD 
+                 # 📐 Motor CAD - TecniDib
 
+![Versión](https://img.shields.io/badge/Versi%C3%B3n-4.8-blue?style=for-the-badge)
+![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
+![Licencia](https://img.shields.io/badge/Licencia-Open_Source-success?style=for-the-badge)
 
-Bienvenido al Motor CAD diseñado específicamente para Dibujo Técnico. 
-Este documento explica todas las funciones, herramientas y atajos para sacar 
-el máximo provecho a la aplicación.
+Una aplicación web de Dibujo Técnico y Diseño Asistido por Ordenador (CAD) diseñada específicamente para la docencia en Educación Plástica y Visual. Se ejecuta de forma nativa en el navegador, sin necesidad de instalación ni bases de datos, permitiendo trabajar en pizarras digitales, ordenadores, tablets y exportar los resultados a formato PDF a escala exacta 1:1.
 
------------------------------------------------------------------------------
-1. CONCEPTOS BÁSICOS DEL MOTOR
------------------------------------------------------------------------------
-- DIBUJO "CLIC A CLIC": Para dibujar (segmentos, circunferencias, etc.) NO 
-  necesitas mantener el botón del ratón pulsado. Haz un clic para marcar 
-  el inicio, mueve el ratón libremente, y haz un segundo clic para terminar.
-- MEDIDAS EXACTAS POR TECLADO: Mientras mueves el ratón para dibujar un 
-  elemento, simplemente teclea un número en tu teclado (ej. "50") y pulsa 
-  ENTER. El elemento se dibujará con esa medida exacta en milímetros hacia 
-  la dirección donde apunta el cursor.
-- IMANTACIÓN (SNAPPING): El cursor se pegará automáticamente a los extremos, 
-  puntos medios, centros, vértices e intersecciones exactas de las líneas. 
-  Verás un pequeño círculo rojo cuando el imán detecte un punto clave.
+---
 
------------------------------------------------------------------------------
-2. BARRA SUPERIOR (GESTIÓN DE ARCHIVOS Y LIENZO)
------------------------------------------------------------------------------
-- Tamaño Lámina: Cambia las dimensiones del papel en milímetros (Por 
-  defecto DIN A4: 297x210mm).
-- Márgenes: Genera un recuadro automático. Puedes darle la distancia a los 
-  bordes del papel (ej. 25mm a la izquierda) o darle un Ancho/Alto exacto.
-- PDF Base: Permite cargar un archivo PDF de tu ordenador para usarlo 
-  como plantilla o enunciado de fondo.
-- Guardar / Cargar: Guarda el estado editable de tu dibujo en un archivo 
-  ligero (.json) para seguir trabajando otro día o enviarlo a los alumnos.
-- PDF (Rojo): Exporta tu trabajo final a un PDF en alta calidad geométrica, 
-  perfecto para imprimir a escala 1:1.
-- Nuevo Lienzo: Borra todo y empieza con un papel en blanco.
+## 📑 Índice
+1. [Filosofía de Uso](#-filosofía-de-uso)
+2. [Gestión de Archivos y Lienzo](#-gestión-de-archivos-y-lienzo)
+3. [Herramientas de Dibujo](#-herramientas-de-dibujo)
+4. [Edición Avanzada y Estilos](#-edición-avanzada-y-estilos)
+5. [Atajos de Teclado](#-atajos-de-teclado-cheat-sheet)
 
------------------------------------------------------------------------------
-3. BARRA DE PROPIEDADES (ESTILOS)
------------------------------------------------------------------------------
-(Ubicada debajo de la barra superior)
-- Botón Imán (Verde): Activa o desactiva la atracción automática del cursor.
-- Color: Cambia el color de la línea del próximo elemento que dibujes.
-- Fondo: Color de relleno para la herramienta de Relleno/Rayado.
-- Grosor: Grosor de la línea en milímetros (0.1 a 8 mm).
-- Trazo: Elige entre línea continua, discontinua o raya-punto (ejes).
-- Acabado: Añade puntas de flecha o líneas de 45º a los extremos del 
-  siguiente trazado (ideal para acotaciones manuales).
-- Lados Polígono: Define el número de lados para la herramienta Polígono.
+---
 
------------------------------------------------------------------------------
-4. HERRAMIENTAS DE DIBUJO (PANEL LATERAL)
------------------------------------------------------------------------------
-[👆] Selector / Mover
-  - Un clic en un elemento: Lo selecciona (se pone azul) para arrastrarlo.
-  - Mantener CTRL + Clic: Selecciona varios elementos a la vez.
-  - Doble Clic en un elemento: Abre un menú para cambiar su color, 
-    grosor, o editar su texto.
+## 🧠 Filosofía de Uso
 
-[📏] Segmento
-  - Clic 1: Punto de inicio. Clic 2: Punto final.
-  - Atajo: Mantén pulsada la tecla SHIFT para dibujar en modo Ortogonal 
-    (líneas perfectamente horizontales o verticales).
+Para garantizar la máxima precisión técnica, el motor utiliza un paradigma profesional:
 
-[📏 mm] Acotar (Normativa ISO)
-  - Requiere 3 pasos:
-    1. Clic en el inicio de la línea a medir.
-    2. Clic en el final de la línea a medir.
-    3. Mueve el ratón hacia arriba, abajo o un lado y haz Clic. La cota 
-       se dibujará desplazada a 5mm, con líneas de extensión y el texto 
-       cortando la línea central.
+*   **Trazado "Clic a Clic":** No es necesario mantener pulsado el botón del ratón para dibujar. Haz un clic para marcar el punto de inicio, mueve el ratón libremente, y haz un segundo clic para terminar.
+*   **📐 Medidas por Teclado:** Mientras mueves el ratón para trazar una línea, un radio o un ángulo, simplemente **teclea un número** (ej: `50`) y pulsa <kbd>Enter</kbd>. El elemento se dibujará con esa medida milimétrica exacta en la dirección de tu cursor.
+*   **🧲 Imantación Automática (Snapping):** El cursor se verá atraído automáticamente a extremos de líneas, puntos medios, centros de circunferencias, vértices e **intersecciones exactas**. Lo sabrás porque aparecerá un pequeño círculo rojo indicador.
+*   **❌ Cancelación Rápida:** Si estás a mitad de trazar cualquier elemento y te equivocas, simplemente haz **Clic Derecho** (o pulsa <kbd>ESC</kbd>) para cancelar el dibujo en curso.
 
-[⫽] Paralela y [⟂] Perpendicular
-  - Clic 1: Toca una línea base ya dibujada (se pondrá azul).
-  - Clic 2 y 3: Dibuja tu nueva línea en cualquier parte; el motor 
-    bloqueará la inclinación para que sea perfectamente paralela o 
-    perpendicular a la seleccionada.
+---
 
-[📐] Línea con Ángulo
-  - Clic 1: Toca una línea de referencia.
-  - Te pedirá un ángulo exacto (ej: 30, 45, 60 grados).
-  - Clic 2 y 3: Dibuja la línea que mantendrá ese ángulo respecto a la base.
+## 📄 Gestión de Archivos y Lienzo
 
-[⭕] Circunferencia
-  - Clic 1: Marca el centro. Clic 2: Marca el radio.
+En la barra superior encontrarás los controles generales del proyecto:
 
-[◿] Arco (3 Pasos)
-  - Clic 1: Marca el centro del compás.
-  - Clic 2: Marca el punto de inicio (Apertura del compás).
-  - Clic 3: Gira el ratón y marca dónde termina el trazado del arco.
+*   **Tamaño Lámina:** Ajusta el tamaño del papel en milímetros (Por defecto DIN A4 apaisado: 297x210 mm).
+*   **Márgenes:** Genera un recuadro paramétrico basado en las distancias a los bordes del papel o un tamaño exacto. *(Nota: Se generan mediante segmentos independientes para que puedas borrarlos o modificarlos individualmente).*
+*   **PDF Base:** Importa un PDF desde tu equipo para usarlo como enunciado o plantilla de calco (se ajusta al fondo en alta calidad).
+*   **Guardar / Cargar:** Exporta el estado actual editable en un archivo local `.json` para continuar otro día o enviarlo a tus alumnos.
+*   **Exportar PDF:** Renderiza tu solución en un documento PDF a escala real respetando los grosores y tipos de línea.
+*   **Zoom:** Usa los botones `➕`/`➖`, o mantén <kbd>Ctrl</kbd> + **Rueda del ratón** para acercarte al milímetro. En tablets, utiliza el gesto de *pellizcar*.
 
-[〰] Curva (Spline)
-  - Ve haciendo clics para añadir los puntos de la curva.
-  - Para finalizar, haz clic cerca del último punto que pusiste.
-  - Si usas el Selector [👆] y haces clic en la curva, verás sus puntos de 
-    control y podrás arrastrarlos para modificar la curvatura.
+---
 
-[⬟] Polígono Regular
-  - Cambia los lados en la Barra de Propiedades.
-  - Clic 1: Marca el centro. Clic 2: Marca la distancia del radio.
+## 🧰 Herramientas de Dibujo
 
-[🔲] Relleno / Rayado de piezas
-  - Ve haciendo clics para dibujar el contorno cerrado de la pieza.
-  - Haz clic cerca del inicio (o pulsa ESC) para cerrar la figura. 
-  - Se rellenará automáticamente con líneas a 45º (patrón de corte ISO).
+Cada herramienta tiene un **atajo de teclado** asignado (una sola letra) para agilizar el flujo de trabajo en clase:
 
-[➕] Punto
-  - Añade un punto en forma de cruz horizontal y vertical (+).
+| Icono | Herramienta | Atajo | Comportamiento |
+| :---: | :--- | :---: | :--- |
+| 👆 | **Selector / Mover** | <kbd>V</kbd> | Haz clic para mover. Mantén <kbd>Ctrl</kbd> para multiselección. |
+| 📏 | **Segmento** | <kbd>L</kbd> | Clic inicial y final. Mantén <kbd>Shift</kbd> para trazos Ortogonales (0º/90º). |
+| 📏 | **Acotar (Normativa ISO)** | <kbd>M</kbd> | **3 Pasos:** 1º Clic inicio, 2º Clic fin, 3º Desplaza el ratón hacia un lado para separar la cota 5mm y haz clic para fijarla. |
+| ⫽ | **Paralela** | <kbd>P</kbd> | Selecciona una línea base. Luego dibuja libremente; la inclinación estará bloqueada. |
+| ⟂ | **Perpendicular** | <kbd>O</kbd> | Selecciona una línea base. Dibuja bloqueado a 90º respecto a ella. |
+| 📐 | **Línea Ángulo** | <kbd>A</kbd> | Selecciona línea base. Introduce el ángulo (ej: `45`) y traza. |
+| ⭕ | **Circunferencia** | <kbd>C</kbd> | Clic para el centro, mueve para definir el radio (Muestra línea guía). |
+| ◿ | **Arco** | <kbd>R</kbd> | **3 Pasos:** 1º Centro, 2º Punto de Inicio (fija el radio), 3º Punto Final. |
+| 〰 | **Curva (Spline)** | <kbd>S</kbd> | Ve haciendo clics. Haz clic cerca del último punto para cerrar el trazado. |
+| ⬟ | **Polígono** | <kbd>G</kbd> | Configura los lados en la barra superior. 1º Clic Centro, 2º Radio. |
+| 🔲 | **Relleno (Rayado)** | <kbd>F</kbd> | Dibuja un contorno cerrado haciendo clics. Se rellenará automáticamente (ideal para cortes en piezas). |
+| ➕ | **Punto** | <kbd>X</kbd> | Dibuja un punto exacto en forma de cruz ortogonal. |
+| A | **Texto Libre** | <kbd>T</kbd> | Añade una etiqueta de texto horizontal. |
+| 🏷 | **Etiqueta Orientada** | <kbd>E</kbd> | Toca un elemento. La etiqueta se **rotará y separará automáticamente** para no pisar el trazado. |
+| 🧽 | **Borrador** | <kbd>B</kbd> | Haz clic sobre un elemento, o arrastra en el vacío para crear una caja de borrado masivo. |
 
-[ A ] Texto y [🏷] Etiqueta
-  - Texto: Haz clic en cualquier lugar y escribe un texto libre.
-  - Etiqueta: Si haces clic sobre una línea dibujada, el texto que 
-    escribas se rotará y alineará automáticamente con la pendiente de esa línea.
+---
 
-[🧽] Borrador
-  - Opción A: Haz clic directamente sobre una línea para borrarla.
-  - Opción B: Haz clic en un área vacía y arrastra para crear un 
-    rectángulo azul. Todo lo que quede dentro se borrará.
+## ⚙️ Edición Avanzada y Estilos
 
------------------------------------------------------------------------------
-5. ATAJOS DE TECLADO RÁPIDOS
------------------------------------------------------------------------------
-- Escribir un número:   Fija la longitud, radio o ángulo exacto.
-- Enter:                Confirma la medida escrita por teclado.
-- Shift (Mantener):     Modo Ortogonal (Rectas a 0º o 90º).
-- Escape (ESC):         Cancela la herramienta actual o suelta la selección.
-- Suprimir / Retroceso: Borra los elementos seleccionados con el Dedo [👆].
-- Ctrl + Z:             Deshacer última acción.
-- Ctrl + Y:             Rehacer acción.
-- Ctrl + Clic:          Selección múltiple de elementos.
+### Panel de Estilos (Barra Inferior)
+Antes de dibujar un elemento, puedes definir sus propiedades globales:
+*   **Imantado:** Enciende/Apaga el motor de Snapping automático.
+*   **Color de Línea y Fondo:** Elige el color del trazo y el relleno.
+*   **Grosor y Trazo:** Define milímetros (ej: `0.5`) y tipo de línea (Continua, Oculta discontinua, Ejes raya-punto).
+*   **Acabados (Cotas):** Añade terminaciones de flechas bidireccionales o líneas a 45º para acotaciones.
 
-=============================================================================
-Desarrollado para la enseñanza de Educación Plástica y Dibujo Técnico
-=============================================================================
+### Edición Post-Trazado (Clic Derecho)
+Si ya has dibujado un elemento y quieres modificarlo:
+1. Activa la herramienta **Selector** (<kbd>V</kbd>).
+2. Haz **Clic Derecho** sobre cualquier línea, círculo o texto.
+3. Se abrirá un panel flotante donde podrás editar su grosor, color, tipo de línea, o si es un texto, cambiar su tamaño y contenido en tiempo real.
+
+> **💡 Truco de edición de curvas:** Si seleccionas una curva *Spline* con la herramienta Selector, verás aparecer sus **puntos de control**. Puedes arrastrar estos puntos para modificar la curvatura como en un programa de diseño vectorial profesional.
+
+---
+
+## ⌨️ Atajos de Teclado (Cheat Sheet)
+
+Para una velocidad máxima de dibujo, usa la mano izquierda en el teclado y la derecha en el ratón.
+
+| Acción | Atajo |
+| :--- | :---: |
+| Seleccionar / Mover | <kbd>V</kbd> |
+| Medida por Teclado | Escribir número + <kbd>Enter</kbd> |
+| Cancelar trazado actual | <kbd>Clic Derecho</kbd> o <kbd>ESC</kbd> |
+| Borrar elemento/s seleccionado/s | <kbd>Suprimir</kbd> o <kbd>Retroceso</kbd> |
+| Selección Múltiple | Mantener <kbd>Ctrl</kbd> + Clics |
+| Deshacer | <kbd>Ctrl</kbd> + <kbd>Z</kbd> |
+| Rehacer | <kbd>Ctrl</kbd> + <kbd>Y</kbd> |
+| Zoom + / - | <kbd>Ctrl</kbd> + **Rueda Ratón** |
+
+---
+*Desarrollado para facilitar la docencia y el aprendizaje de la Geometría Descriptiva y el Dibujo Técnico.*
