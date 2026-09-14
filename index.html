@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TecniDib - V4.8</title>
+    <title>TecniDib - V4.9</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -46,7 +46,6 @@
         #snap-indicator { fill: rgba(255,0,0,0.2); stroke: red; stroke-width: 1.5; opacity: 0; pointer-events: none; }
         .selection-rect { fill: rgba(0, 122, 204, 0.2); stroke: #007acc; stroke-dasharray: 4,4; stroke-width: 1; }
 
-        /* Novedad: Panel de Edición */
         #edit-modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border: 1px solid #555; z-index: 1000; box-shadow: 0 4px 30px rgba(0,0,0,0.8); border-radius: 8px; width: 300px; }
         #edit-modal h3 { margin-bottom: 15px; color: var(--accent); font-size: 16px; }
         #edit-fields { display: flex; flex-direction: column; gap: 12px; }
@@ -110,7 +109,6 @@
         </label>
     </div>
 
-    <!-- Atajos integrados en data-key -->
     <aside id="toolbar">
         <button class="tool-btn" data-tool="cursor" data-key="v" title="Seleccionar/Mover [Tecla: V] (Clic derecho para Editar, CTRL multiselección)"><svg viewBox="0 0 24 24"><path d="M5 4l14 10-5.5 1.5L16 21l-3-1-2.5-5.5L5 18z"/></svg></button>
         <button class="tool-btn active" data-tool="line" data-key="l" title="Segmento [Tecla: L] (Shift para Orto)"><svg viewBox="0 0 24 24"><line x1="4" y1="20" x2="20" y2="4"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg></button>
@@ -152,7 +150,6 @@
             <circle id="snap-indicator" r="3" cx="0" cy="0" />
         </svg>
 
-        <!-- Panel Edición Clic Derecho -->
         <div id="edit-modal">
             <h3>Propiedades del Elemento</h3>
             <div id="edit-fields"></div>
@@ -197,7 +194,10 @@
                 ghostP2: null,
                 zoomLevel: 95, 
                 initialPinchDistance: null,
-                editingEntity: null // Entidad en edición por clic derecho
+                editingEntity: null,
+                arcStartAngle: 0,
+                arcCurrentAngle: 0,
+                arcSweepAngle: 0
             },
 
             snapTolerance: 4, 
@@ -210,7 +210,6 @@
                 window.addEventListener('keydown', (e) => {
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
                     
-                    // Novedad: Atajos de teclado para herramientas
                     if (!e.ctrlKey && !e.shiftKey && /^[a-z]$/i.test(e.key)) {
                         const btn = document.querySelector(`.tool-btn[data-key="${e.key.toLowerCase()}"]`);
                         if (btn) { btn.click(); return; }
@@ -291,13 +290,20 @@
                         dx = this.state.lastPos.x - this.state.p1.x; dy = this.state.lastPos.y - this.state.p1.y;
                         mag = Math.hypot(dx, dy); if (mag === 0) { dx = 1; dy = 0; mag = 1; }
                         this.state.p2 = { x: this.state.p1.x + (dx/mag)*val, y: this.state.p1.y + (dy/mag)*val };
-                        this.state.step = 2; this.state.keyboardInput = ""; this.forceGhostUpdate();
+                        this.state.step = 2; 
+                        this.state.keyboardInput = ""; 
+                        this.state.arcStartAngle = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
+                        this.state.arcCurrentAngle = this.state.arcStartAngle;
+                        this.state.arcSweepAngle = 0;
+                        this.forceGhostUpdate();
                         return; 
                     } else if (this.state.step === 2) {
                         let r = Math.hypot(this.state.p2.x - this.state.p1.x, this.state.p2.y - this.state.p1.y);
-                        let start = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
-                        let end = start + (val * Math.PI / 180);
-                        this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: start, endAngle: end, style: sty });
+                        let sign = this.state.arcSweepAngle >= 0 ? 1 : -1;
+                        let sweep = sign * (val * Math.PI / 180);
+                        if (sweep > 1.999 * Math.PI) sweep = 1.999 * Math.PI;
+                        if (sweep < -1.999 * Math.PI) sweep = -1.999 * Math.PI;
+                        this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: this.state.arcStartAngle, sweepAngle: sweep, style: sty });
                     }
                 }
 
@@ -327,7 +333,6 @@
                 if (rw > 0 && rh > 0) {
                     this.saveState(); let s = this.getStyle(); s.width = parseFloat(s.width) + 0.3;
                     let t = Date.now();
-                    // Novedad: Márgenes creados por 4 segmentos independientes
                     this.data.push({ type: 'line', id: t+1, x1: x, y1: y, x2: x+rw, y2: y, style: {...s} });
                     this.data.push({ type: 'line', id: t+2, x1: x+rw, y1: y, x2: x+rw, y2: y+rh, style: {...s} });
                     this.data.push({ type: 'line', id: t+3, x1: x+rw, y1: y+rh, x2: x, y2: y+rh, style: {...s} });
@@ -384,7 +389,16 @@
                     if (ent.type === 'line' || ent.type === 'measure') {
                         let d = this.distPointToSegment({x, y}, {x: ent.x1, y: ent.y1}, {x: ent.x2, y: ent.y2});
                         if (d < minDist) { minDist = d; hit = ent; }
-                    } else if (ent.type === 'circle' || ent.type === 'arc' || ent.type === 'polygon') {
+                    } else if (ent.type === 'rect') {
+                        let pts = [{x: ent.x, y: ent.y}, {x: ent.x + ent.w, y: ent.y}, {x: ent.x + ent.w, y: ent.y + ent.h}, {x: ent.x, y: ent.y + ent.h}];
+                        for (let i = 0; i < 4; i++) {
+                            let next = (i + 1) % 4; let d = this.distPointToSegment({x,y}, pts[i], pts[next]);
+                            if (d < minDist) { minDist = d; hit = ent; }
+                        }
+                    } else if (ent.type === 'circle' || ent.type === 'polygon') {
+                        let d = Math.abs(Math.hypot(ent.cx - x, ent.cy - y) - ent.r);
+                        if (d < minDist) { minDist = d; hit = ent; }
+                    } else if (ent.type === 'arc') {
                         let d = Math.abs(Math.hypot(ent.cx - x, ent.cy - y) - ent.r);
                         if (d < minDist) { minDist = d; hit = ent; }
                     } else if (ent.type === 'point' || ent.type === 'text' || ent.type === 'tag') {
@@ -416,13 +430,14 @@
                 return path;
             },
 
-            getSvgArcPath(cx, cy, r, startAngle, endAngle) {
+            getSvgArcPath(cx, cy, r, startAngle, sweepAngle) {
+                if (Math.abs(sweepAngle) < 0.0001) return '';
+                let endAngle = startAngle + sweepAngle;
                 let p1x = cx + r * Math.cos(startAngle), p1y = cy + r * Math.sin(startAngle);
                 let p2x = cx + r * Math.cos(endAngle), p2y = cy + r * Math.sin(endAngle);
-                let delta = endAngle - startAngle;
-                if (delta < 0) delta += 2 * Math.PI; 
-                let largeArc = delta > Math.PI ? 1 : 0; 
-                return `M ${p1x} ${p1y} A ${r} ${r} 0 ${largeArc} 1 ${p2x} ${p2y}`;
+                let largeArc = Math.abs(sweepAngle) > Math.PI ? 1 : 0; 
+                let sweepFlag = sweepAngle > 0 ? 1 : 0; 
+                return `M ${p1x} ${p1y} A ${r} ${r} 0 ${largeArc} ${sweepFlag} ${p2x} ${p2y}`;
             },
 
             cancelAction() {
@@ -442,6 +457,9 @@
                         let d2 = Math.hypot(ent.x2 - x, ent.y2 - y); if (d2 < minDistance) { minDistance = d2; bestSnap = {x: ent.x2, y: ent.y2}; }
                         let mx = (ent.x1 + ent.x2) / 2, my = (ent.y1 + ent.y2) / 2; let dm = Math.hypot(mx - x, my - y);
                         if (dm < minDistance) { minDistance = dm; bestSnap = {x: mx, y: my}; }
+                    } else if (ent.type === 'rect') {
+                        let pts = [{x: ent.x, y: ent.y}, {x: ent.x + ent.w, y: ent.y}, {x: ent.x + ent.w, y: ent.y + ent.h}, {x: ent.x, y: ent.y + ent.h}];
+                        pts.forEach(p => { let dp = Math.hypot(p.x - x, p.y - y); if (dp < minDistance) { minDistance = dp; bestSnap = p; } });
                     } else if (ent.type === 'point' || ent.type === 'curve' || ent.type === 'fill') {
                         let pts = (ent.type === 'point') ? [ent] : ent.points;
                         pts.forEach(p => { let dp = Math.hypot(p.x - x, p.y - y); if (dp < minDistance) { minDistance = dp; bestSnap = p; } });
@@ -455,8 +473,10 @@
                         }
                     } else if (ent.type === 'arc') {
                         let dc = Math.hypot(ent.cx - x, ent.cy - y); if (dc < minDistance) { minDistance = dc; bestSnap = {x: ent.cx, y: ent.cy}; }
+                        
+                        let endA = ent.sweepAngle !== undefined ? ent.startAngle + ent.sweepAngle : ent.endAngle;
                         let px1 = ent.cx + ent.r * Math.cos(ent.startAngle); let py1 = ent.cy + ent.r * Math.sin(ent.startAngle);
-                        let px2 = ent.cx + ent.r * Math.cos(ent.endAngle); let py2 = ent.cy + ent.r * Math.sin(ent.endAngle);
+                        let px2 = ent.cx + ent.r * Math.cos(endA); let py2 = ent.cy + ent.r * Math.sin(endA);
                         [{x: px1, y: py1}, {x: px2, y: py2}].forEach(p => { let dp = Math.hypot(p.x - x, p.y - y); if (dp < minDistance) { minDistance = dp; bestSnap = p; } });
                     }
                 });
@@ -482,7 +502,6 @@
                 return this.calculateSnap(rawX, rawY);
             },
 
-            // --- Novedad: Edición con Clic Derecho ---
             openEditModal(ent) {
                 this.state.editingEntity = ent;
                 const modal = document.getElementById('edit-modal');
@@ -538,7 +557,6 @@
             },
 
             onPointerDown(evt) {
-                // Control Zoom Táctil
                 if (evt.touches && evt.touches.length === 2) {
                     this.state.initialPinchDistance = Math.hypot(evt.touches[0].clientX - evt.touches[1].clientX, evt.touches[0].clientY - evt.touches[1].clientY);
                     return;
@@ -581,7 +599,6 @@
                     return;
                 }
                 
-                // Novedad: Etiqueta con Separación Inteligente (Nunca se cruza)
                 if (this.state.tool === 'tag') {
                     let hit = this.getHitEntity(pos.x, pos.y); 
                     let angle = 0; let ox = pos.x; let oy = pos.y;
@@ -591,13 +608,13 @@
                             let dx = hit.x2 - hit.x1; let dy = hit.y2 - hit.y1;
                             angle = Math.atan2(dy, dx) * 180 / Math.PI;
                             let mag = Math.hypot(dx, dy);
-                            if (mag > 0) { let nx = -dy/mag; let ny = dx/mag; ox += nx * 4; oy += ny * 4; } // 4mm offset normal
+                            if (mag > 0) { let nx = -dy/mag; let ny = dx/mag; ox += nx * 4; oy += ny * 4; } 
                         } else if (hit.type === 'point') {
-                            oy -= 5; // 5mm arriba
+                            oy -= 5; 
                         } else if (hit.type === 'circle' || hit.type === 'arc' || hit.type === 'polygon') {
                             let dx = pos.x - hit.cx; let dy = pos.y - hit.cy;
                             let mag = Math.hypot(dx, dy);
-                            if (mag > 0) { ox += (dx/mag)*4; oy += (dy/mag)*4; } // 4mm hacia afuera
+                            if (mag > 0) { ox += (dx/mag)*4; oy += (dy/mag)*4; } 
                         }
                     }
                     
@@ -685,15 +702,24 @@
                     return;
                 }
 
+                // --- NOVEDAD: ARCOS CON SWEEP ACCUMULADO DINÁMICO ---
                 if (this.state.tool === 'arc') {
-                    if (this.state.step === 0) { this.state.p1 = pos; this.state.step = 1; this.state.isDrawing = true; } 
-                    else if (this.state.step === 1) { this.state.p2 = pos; this.state.step = 2; } 
+                    if (this.state.step === 0) { 
+                        this.state.p1 = pos; 
+                        this.state.step = 1; 
+                        this.state.isDrawing = true; 
+                    } 
+                    else if (this.state.step === 1) { 
+                        this.state.p2 = pos; 
+                        this.state.step = 2; 
+                        this.state.arcStartAngle = Math.atan2(pos.y - this.state.p1.y, pos.x - this.state.p1.x);
+                        this.state.arcCurrentAngle = this.state.arcStartAngle;
+                        this.state.arcSweepAngle = 0;
+                    } 
                     else if (this.state.step === 2) {
                         this.saveState();
                         let r = Math.hypot(this.state.p2.x - this.state.p1.x, this.state.p2.y - this.state.p1.y);
-                        let start = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
-                        let end = Math.atan2(pos.y - this.state.p1.y, pos.x - this.state.p1.x);
-                        this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: start, endAngle: end, style: this.getStyle() });
+                        this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: this.state.arcStartAngle, sweepAngle: this.state.arcSweepAngle, style: this.getStyle() });
                         this.cancelAction();
                     }
                     return;
@@ -874,14 +900,27 @@
                         overlayText = `<text x="${this.state.p1.x + rNum/2}" y="${this.state.p1.y - 2}" fill="#007acc" font-size="4" font-family="monospace" text-anchor="middle">R: ${kDistStr} mm</text>`;
                     } else if (this.state.step === 2) {
                         let r = Math.hypot(this.state.p2.x - this.state.p1.x, this.state.p2.y - this.state.p1.y);
-                        let startAngle = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
-                        let endAngle = Math.atan2(pos.y - this.state.p1.y, pos.x - this.state.p1.x);
                         
-                        let degrees = (endAngle - startAngle) * 180 / Math.PI; if (degrees < 0) degrees += 360;
-                        let kDegStr = kInput !== "" ? kInput + "_" : degrees.toFixed(1);
-                        if(kInput !== "") endAngle = startAngle + (parseFloat(kInput) * Math.PI / 180 || 0);
+                        // Novedad Arc Lógica Dinámica Acumulada
+                        let currAngle = Math.atan2(pos.y - this.state.p1.y, pos.x - this.state.p1.x);
+                        if (kInput === "") {
+                            let diff = currAngle - this.state.arcCurrentAngle;
+                            if (diff > Math.PI) diff -= 2 * Math.PI;
+                            if (diff < -Math.PI) diff += 2 * Math.PI;
+                            this.state.arcSweepAngle += diff;
+                            if (this.state.arcSweepAngle > 1.999 * Math.PI) this.state.arcSweepAngle = 1.999 * Math.PI;
+                            if (this.state.arcSweepAngle < -1.999 * Math.PI) this.state.arcSweepAngle = -1.999 * Math.PI;
+                            this.state.arcCurrentAngle = currAngle;
+                        } else {
+                            let sign = this.state.arcSweepAngle >= 0 ? 1 : -1;
+                            this.state.arcSweepAngle = sign * (parseFloat(kInput) * Math.PI / 180 || 0);
+                        }
 
-                        let pathData = this.getSvgArcPath(this.state.p1.x, this.state.p1.y, r, startAngle, endAngle);
+                        let degrees = Math.abs(this.state.arcSweepAngle * 180 / Math.PI);
+                        let kDegStr = kInput !== "" ? kInput + "_" : degrees.toFixed(1);
+
+                        let pathData = this.getSvgArcPath(this.state.p1.x, this.state.p1.y, r, this.state.arcStartAngle, this.state.arcSweepAngle);
+                        
                         ghostContent = `<circle cx="${this.state.p1.x}" cy="${this.state.p1.y}" r="${r}" stroke="#aaa" stroke-dasharray="2,4" fill="none" stroke-width="0.5"/><path d="${pathData}" stroke="${s.color}" fill="none" stroke-width="${s.width}"/><line x1="${this.state.p1.x}" y1="${this.state.p1.y}" x2="${pos.x}" y2="${pos.y}" stroke="${s.color}" stroke-dasharray="1,2" stroke-width="0.3" opacity="0.5"/>`;
                         overlayText = `<text x="${pos.x}" y="${pos.y - 3}" fill="#007acc" font-size="4" font-family="monospace">${kDegStr}º</text>`;
                     }
@@ -942,6 +981,8 @@
                     } else if (ent.type === 'measure') {
                         let distStr = Math.hypot(ent.x2 - ent.x1, ent.y2 - ent.y1).toFixed(1);
                         this.layerSolucion.innerHTML += this.getRenderCota(ent.x1, ent.y1, ent.x2, ent.y2, s, dash, markStyle, distStr, "1.0", ent.offsetDir);
+                    } else if (ent.type === 'rect') {
+                        this.layerSolucion.innerHTML += `<rect x="${ent.x}" y="${ent.y}" width="${ent.w}" height="${ent.h}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
                     } else if (ent.type === 'circle') {
                         this.layerSolucion.innerHTML += `<circle cx="${ent.cx}" cy="${ent.cy}" r="${ent.r}" fill="${s.fillColor !== '#ffffff' ? s.fillColor : 'none'}" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
                         this.layerSolucion.innerHTML += `<line x1="${ent.cx-4}" y1="${ent.cy}" x2="${ent.cx+4}" y2="${ent.cy}" stroke="${color}" stroke-width="0.3"/><line x1="${ent.cx}" y1="${ent.cy-4}" x2="${ent.cx}" y2="${ent.cy+4}" stroke="${color}" stroke-width="0.3"/>`;
@@ -953,7 +994,8 @@
                         }
                         this.layerSolucion.innerHTML += `<polygon points="${pts.join(' ')}" fill="${s.fillColor !== '#ffffff' ? s.fillColor : 'none'}" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
                     } else if (ent.type === 'arc') {
-                        let pathData = this.getSvgArcPath(ent.cx, ent.cy, ent.r, ent.startAngle, ent.endAngle);
+                        let sweep = ent.sweepAngle !== undefined ? ent.sweepAngle : (ent.endAngle - ent.startAngle < 0 ? ent.endAngle - ent.startAngle + 2 * Math.PI : ent.endAngle - ent.startAngle);
+                        let pathData = this.getSvgArcPath(ent.cx, ent.cy, ent.r, ent.startAngle, sweep);
                         this.layerSolucion.innerHTML += `<path d="${pathData}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
                     } else if (ent.type === 'curve') {
                         let pathData = this.smoothPath(ent.points);
@@ -980,8 +1022,8 @@
             redo() { if (this.redoHistory.length > 0) { this.history.push(JSON.stringify(this.data)); this.data = JSON.parse(this.redoHistory.pop()); this.cancelAction(); this.saveToStorage(); } },
             clearAll() { if(confirm("¿Borrar todo?")) { this.saveState(); this.data = []; document.getElementById('bg-pdf-image').removeAttribute('href'); this.cancelAction(); } },
             
-            saveToStorage() { localStorage.setItem('cad_model_v4_8', JSON.stringify({d: this.data, s: this.canvasSize})); },
-            loadFromStorage() { const s = localStorage.getItem('cad_model_v4_8'); if (s) { let p = JSON.parse(s); this.data = p.d; if(p.s) { this.canvasSize = p.s; this.updateCanvas(); } this.renderAll(); } },
+            saveToStorage() { localStorage.setItem('cad_model_v4_9', JSON.stringify({d: this.data, s: this.canvasSize})); },
+            loadFromStorage() { const s = localStorage.getItem('cad_model_v4_9'); if (s) { let p = JSON.parse(s); this.data = p.d; if(p.s) { this.canvasSize = p.s; this.updateCanvas(); } this.renderAll(); } },
 
             saveToFile() {
                 const blob = new Blob([JSON.stringify({data: this.data, size: this.canvasSize})], {type: "application/json"});
@@ -1047,7 +1089,7 @@
 
             bindEvents() {
                 this.svg.addEventListener('mousedown', (e) => {
-                    if (e.button === 2) return; // Ignorar clic derecho en el flujo normal
+                    if (e.button === 2) return; 
                     this.onPointerDown(e);
                 });
                 this.svg.addEventListener('mousemove', (e) => this.onPointerMove(e));
@@ -1056,15 +1098,14 @@
                     this.onPointerUp(e);
                 });
                 
-                // Novedad: Clic derecho (Context Menu) para cancelar o editar
                 this.svg.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
                     if (this.state.isDrawing) {
-                        this.cancelAction(); // Cancelar dibujo
+                        this.cancelAction(); 
                     } else if (this.state.tool === 'cursor') {
                         const pos = this.getMousePos(e);
                         let hit = this.getHitEntity(pos.x, pos.y);
-                        if (hit) this.openEditModal(hit); // Editar elemento
+                        if (hit) this.openEditModal(hit); 
                     }
                 });
                 
