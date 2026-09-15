@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TecniDib - V4.11</title>
+    <title>Motor CAD Educación Plástica - V4.13</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -221,7 +221,9 @@
                 arcSweepAngle: 0,
                 cropImage: null,
                 cropRect: null,
-                isBoxSelecting: false // Novedad: Control de selección de caja
+                isBoxSelecting: false,
+                duplicateNextDrag: false,   // Novedad: Control para duplicar
+                hasClonedInDrag: false      // Novedad: Bandera para que solo se clone una vez por arrastre
             },
 
             snapTolerance: 4, 
@@ -242,32 +244,13 @@
                         }
                     }
 
+                    // Novedad: Pulsar Alt o D para marcar que queremos duplicar en este movimiento
                     if ((e.key === 'Alt' || e.key.toLowerCase() === 'd') && !e.repeat) {
-                        let targets = [];
-                        if (this.state.hoverEntity) targets.push(this.state.hoverEntity);
-                        else if (this.state.selectedEntities.length > 0) targets = this.state.selectedEntities;
-                        
-                        if (targets.length > 0) {
-                            e.preventDefault();
-                            this.saveState();
-                            let newSelection = [];
-                            let t = Date.now();
-                            targets.forEach((ent, index) => {
-                                let clone = JSON.parse(JSON.stringify(ent));
-                                clone.id = t + index; 
-                                let off = 10;
-                                if (clone.type === 'line' || clone.type === 'measure') { clone.x1+=off; clone.y1+=off; clone.x2+=off; clone.y2+=off; }
-                                else if (clone.type === 'rect') { clone.x+=off; clone.y+=off; }
-                                else if (clone.type === 'circle' || clone.type === 'arc' || clone.type === 'polygon') { clone.cx+=off; clone.cy+=off; }
-                                else if (clone.type === 'point' || clone.type === 'text' || clone.type === 'tag' || clone.type === 'image') { clone.x+=off; clone.y+=off; }
-                                else if (clone.type === 'curve' || clone.type === 'fill') { clone.points.forEach(p => { p.x+=off; p.y+=off; }); }
-                                this.data.push(clone);
-                                newSelection.push(clone);
-                            });
-                            
-                            if (this.state.tool === 'cursor') { this.state.selectedEntities = newSelection; }
-                            this.renderAll();
-                            return;
+                        e.preventDefault();
+                        this.state.duplicateNextDrag = true;
+                        // Si ya estamos arrastrando, forzamos la actualización para que clone instantáneamente
+                        if (this.state.isDrawing && this.state.tool === 'cursor' && !this.state.isBoxSelecting) {
+                            this.forceGhostUpdate();
                         }
                     }
                     
@@ -297,6 +280,13 @@
                         this.data = this.data.filter(ent => !idsToRemove.includes(ent.id));
                         this.state.selectedEntities = [];
                         this.renderAll();
+                    }
+                });
+
+                // Limpieza de tecla suelta
+                window.addEventListener('keyup', (e) => {
+                    if (e.key === 'Alt' || e.key.toLowerCase() === 'd') {
+                        if (!this.state.isDrawing) this.state.duplicateNextDrag = false;
                     }
                 });
             },
@@ -648,7 +638,9 @@
             cancelAction() {
                 this.state.isDrawing = false; this.state.step = 0; this.state.referenceLine = null;
                 this.state.selectedEntities = []; this.state.dragPointIndex = -1; this.state.keyboardInput = "";
-                this.state.isBoxSelecting = false; // Novedad: Reset box select
+                this.state.isBoxSelecting = false; 
+                this.state.duplicateNextDrag = false;
+                this.state.hasClonedInDrag = false;
                 this.layerGhost.innerHTML = ''; this.renderAll();
             },
 
@@ -711,7 +703,6 @@
                 let clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
                 let rawX = (clientX - CTM.e) / CTM.a; let rawY = (clientY - CTM.f) / CTM.d;
                 
-                // Novedad: Si estamos moviendo una selección y se pulsa CTRL, se desactiva el imán
                 if (this.state.tool === 'cursor' && this.state.isDrawing && !this.state.isBoxSelecting && evt.ctrlKey) {
                     this.snapIndicator.style.opacity = 0;
                     return {x: rawX, y: rawY};
@@ -793,7 +784,6 @@
                 
                 if (this.state.keyboardInput !== "") { this.applyKeyboardMeasure(); return; }
                 
-                // Novedad: Lógica de selección por caja
                 if (this.state.tool === 'cursor') {
                     let hit = this.getHitEntity(pos.x, pos.y);
                     if (hit) {
@@ -805,14 +795,16 @@
                         } else {
                             if (!this.state.selectedEntities.find(e => e.id === hit.id)) this.state.selectedEntities = [hit];
                         }
-                        this.state.p1 = pos; this.state.isDrawing = true;
+                        
+                        this.state.hasClonedInDrag = false; // Reset clone flag
+                        this.state.p1 = pos; 
+                        this.state.isDrawing = true;
 
                         if (this.state.selectedEntities.length === 1 && hit.type === 'curve') {
                             hit.points.forEach((p, idx) => { if (Math.hypot(p.x - pos.x, p.y - pos.y) < 6) this.state.dragPointIndex = idx; });
                         } else { this.state.dragPointIndex = -1; }
                         this.renderAll();
                     } else {
-                        // Click en vacío: Iniciar selector de caja
                         if (!evt.ctrlKey) this.state.selectedEntities = [];
                         this.state.p1 = pos; 
                         this.state.isDrawing = true;
@@ -1036,7 +1028,6 @@
                 if (!this.state.isDrawing) return;
 
                 if (this.state.tool === 'cursor') {
-                    // Novedad: Caja de Selección
                     if (this.state.isBoxSelecting) {
                         let minX = Math.min(this.state.p1.x, pos.x), maxX = Math.max(this.state.p1.x, pos.x);
                         let minY = Math.min(this.state.p1.y, pos.y), maxY = Math.max(this.state.p1.y, pos.y);
@@ -1046,6 +1037,22 @@
                         if (this.state.dragPointIndex !== -1 && this.state.selectedEntities[0].type === 'curve') {
                             this.state.selectedEntities[0].points[this.state.dragPointIndex] = pos;
                         } else {
+                            // Novedad V4.13: Duplicar al arrastrar con ALT
+                            if ((evt.altKey || this.state.duplicateNextDrag) && !this.state.hasClonedInDrag) {
+                                this.saveState();
+                                let t = Date.now();
+                                let newDragged = [];
+                                this.state.selectedEntities.forEach((ent, index) => {
+                                    let clone = JSON.parse(JSON.stringify(ent));
+                                    clone.id = t + index;
+                                    this.data.push(clone); // Se inyecta la copia que nos llevamos arrastrando
+                                    newDragged.push(clone);
+                                });
+                                this.state.selectedEntities = newDragged;
+                                this.state.hasClonedInDrag = true;
+                                this.state.duplicateNextDrag = false;
+                            }
+
                             let dx = pos.x - this.state.p1.x; let dy = pos.y - this.state.p1.y;
                             this.state.p1 = pos; 
                             this.state.selectedEntities.forEach(e => {
@@ -1212,6 +1219,8 @@
                         this.layerGhost.innerHTML = '';
                         this.renderAll();
                     } else {
+                        // Reseteamos el comportamiento de copia para el siguiente clic
+                        this.state.duplicateNextDrag = false;
                         this.saveState(); 
                     }
                     return; 
@@ -1300,8 +1309,8 @@
             redo() { if (this.redoHistory.length > 0) { this.history.push(JSON.stringify(this.data)); this.data = JSON.parse(this.redoHistory.pop()); this.cancelAction(); this.saveToStorage(); } },
             clearAll() { if(confirm("¿Borrar todo?")) { this.saveState(); this.data = []; document.getElementById('bg-pdf-image').removeAttribute('href'); this.cancelAction(); } },
             
-            saveToStorage() { localStorage.setItem('cad_model_v4_12', JSON.stringify({d: this.data, s: this.canvasSize})); },
-            loadFromStorage() { const s = localStorage.getItem('cad_model_v4_12'); if (s) { let p = JSON.parse(s); this.data = p.d; if(p.s) { this.canvasSize = p.s; this.updateCanvas(); } this.renderAll(); } },
+            saveToStorage() { localStorage.setItem('cad_model_v4_13', JSON.stringify({d: this.data, s: this.canvasSize})); },
+            loadFromStorage() { const s = localStorage.getItem('cad_model_v4_13'); if (s) { let p = JSON.parse(s); this.data = p.d; if(p.s) { this.canvasSize = p.s; this.updateCanvas(); } this.renderAll(); } },
 
             saveToFile() {
                 const blob = new Blob([JSON.stringify({data: this.data, size: this.canvasSize})], {type: "application/json"});
