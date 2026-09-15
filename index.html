@@ -55,6 +55,9 @@
         #crop-container { position: relative; background: #222; border: 2px solid #555; max-width: 90vw; max-height: 75vh; overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,1); }
         #crop-canvas { cursor: crosshair; display: block; }
         .crop-controls { margin-top: 20px; display: flex; gap: 15px; }
+        
+        .page-btn { padding: 2px 6px; background: transparent; border: 1px solid #555; color: white; border-radius: 3px; cursor: pointer;}
+        .page-btn:hover { background: #555;}
     </style>
 </head>
 <body>
@@ -62,10 +65,20 @@
     <header id="topbar">
         <div style="display: flex; gap: 10px; align-items: center;">
             <button class="btn-action" onclick="App.changeCanvasSize()">📏 Tamaño Lámina</button>
-            <span id="canvas-label" style="font-weight: bold; margin-right: 10px;">297 x 210 mm</span>
+            <span id="canvas-label" style="font-weight: bold; margin-right: 5px;">297 x 210 mm</span>
+            
+            <!-- Novedad: Control Multi-página -->
+            <div style="display: flex; align-items: center; background: #222; padding: 2px 6px; border-radius: 4px; gap: 5px; border: 1px solid #444;">
+                <button class="page-btn" onclick="App.prevPage()" title="Página Anterior">◀</button>
+                <span id="page-label" style="font-weight: bold; font-size: 12px; min-width: 50px; text-align: center;">Pág 1/1</span>
+                <button class="page-btn" onclick="App.nextPage()" title="Página Siguiente">▶</button>
+                <button class="btn-action btn-success" style="padding: 2px 6px;" onclick="App.addPage()" title="Nueva Página Independiente">➕</button>
+                <button class="btn-action btn-danger" style="padding: 2px 6px;" onclick="App.deletePage()" title="Borrar Página Actual">🗑️</button>
+            </div>
+
             <div style="border-left: 1px solid var(--border); height: 20px; margin: 0 5px;"></div>
             <button class="btn-action" onclick="App.zoomCanvas(-15)" title="Alejar (Ctrl + Rueda Abajo)">➖</button>
-            <span id="zoom-label" style="font-weight: bold; width: 45px; text-align: center;">95%</span>
+            <span id="zoom-label" style="font-weight: bold; width: 40px; text-align: center;">95%</span>
             <button class="btn-action" onclick="App.zoomCanvas(15)" title="Acercar (Ctrl + Rueda Arriba)">➕</button>
             <span id="save-status" style="margin-left: 10px; color: #888; font-size: 12px;"></span>
         </div>
@@ -85,7 +98,7 @@
             <button class="btn-action" onclick="App.undo()">↩</button>
             <button class="btn-action" onclick="App.redo()">↪</button>
             <button class="btn-action btn-danger" onclick="App.exportPDF()">📄 PDF</button>
-            <button class="btn-action btn-success" onclick="App.newCanvas()">📄 Nuevo Lienzo</button>
+            <button class="btn-action btn-success" onclick="App.newCanvas()">📄 Nuevo</button>
         </div>
     </header>
 
@@ -189,6 +202,11 @@
             snapIndicator: document.getElementById('snap-indicator'),
             coordDisplay: document.getElementById('coords'),
             
+            // NOVEDAD: Arquitectura Multidocumento
+            pages: [{ data: [], history: [], redoHistory: [], bgImage: null }],
+            currentPage: 0,
+            
+            // Punteros a los datos activos (para no romper la lógica existente)
             data: [], 
             history: [], 
             redoHistory: [], 
@@ -222,8 +240,8 @@
                 cropImage: null,
                 cropRect: null,
                 isBoxSelecting: false,
-                duplicateNextDrag: false,   // Novedad: Control para duplicar
-                hasClonedInDrag: false      // Novedad: Bandera para que solo se clone una vez por arrastre
+                duplicateNextDrag: false,   
+                hasClonedInDrag: false      
             },
 
             snapTolerance: 4, 
@@ -244,11 +262,9 @@
                         }
                     }
 
-                    // Novedad: Pulsar Alt o D para marcar que queremos duplicar en este movimiento
                     if ((e.key === 'Alt' || e.key.toLowerCase() === 'd') && !e.repeat) {
                         e.preventDefault();
                         this.state.duplicateNextDrag = true;
-                        // Si ya estamos arrastrando, forzamos la actualización para que clone instantáneamente
                         if (this.state.isDrawing && this.state.tool === 'cursor' && !this.state.isBoxSelecting) {
                             this.forceGhostUpdate();
                         }
@@ -283,12 +299,79 @@
                     }
                 });
 
-                // Limpieza de tecla suelta
                 window.addEventListener('keyup', (e) => {
                     if (e.key === 'Alt' || e.key.toLowerCase() === 'd') {
                         if (!this.state.isDrawing) this.state.duplicateNextDrag = false;
                     }
                 });
+            },
+
+            // --- NOVEDAD: LÓGICA DE PÁGINAS MÚLTIPLES ---
+            syncCurrentPage() {
+                this.pages[this.currentPage].data = [...this.data];
+                this.pages[this.currentPage].history = [...this.history];
+                this.pages[this.currentPage].redoHistory = [...this.redoHistory];
+                this.pages[this.currentPage].bgImage = document.getElementById('bg-pdf-image').getAttribute('href');
+            },
+            
+            loadCurrentPage() {
+                let p = this.pages[this.currentPage];
+                this.data = [...p.data];
+                this.history = [...p.history];
+                this.redoHistory = [...p.redoHistory];
+                let bg = document.getElementById('bg-pdf-image');
+                if (p.bgImage) bg.setAttribute('href', p.bgImage);
+                else bg.removeAttribute('href');
+                
+                document.getElementById('page-label').innerText = `Pág ${this.currentPage + 1}/${this.pages.length}`;
+                this.cancelAction();
+                this.renderAll();
+            },
+
+            addPage() {
+                this.syncCurrentPage();
+                this.pages.push({ data: [], history: [], redoHistory: [], bgImage: null });
+                this.currentPage = this.pages.length - 1;
+                this.loadCurrentPage();
+                this.saveToStorage();
+            },
+
+            prevPage() {
+                if (this.currentPage > 0) {
+                    this.syncCurrentPage();
+                    this.currentPage--;
+                    this.loadCurrentPage();
+                }
+            },
+
+            nextPage() {
+                if (this.currentPage < this.pages.length - 1) {
+                    this.syncCurrentPage();
+                    this.currentPage++;
+                    this.loadCurrentPage();
+                }
+            },
+
+            deletePage() {
+                if (this.pages.length > 1) {
+                    if(confirm("¿Eliminar la página actual definitivamente?")) {
+                        this.pages.splice(this.currentPage, 1);
+                        if (this.currentPage >= this.pages.length) this.currentPage = this.pages.length - 1;
+                        this.loadCurrentPage();
+                        this.saveToStorage();
+                    }
+                } else {
+                    alert("No puedes eliminar la única página. Usa 'Nuevo Lienzo' para vaciarla.");
+                }
+            },
+
+            newCanvas() {
+                if(confirm('¿Crear nuevo lienzo en blanco? Se perderán todas las páginas no guardadas.')) {
+                    this.pages = [{ data: [], history: [], redoHistory: [], bgImage: null }];
+                    this.currentPage = 0;
+                    this.loadCurrentPage();
+                    this.saveToStorage();
+                }
             },
 
             handleCropFile(evt) {
@@ -500,13 +583,6 @@
 
                 this.state.keyboardInput = "";
                 this.cancelAction();
-            },
-
-            newCanvas() {
-                if(confirm('¿Crear nuevo lienzo en blanco? Se perderá el trabajo no guardado.')) {
-                    this.saveState(); this.data = []; document.getElementById('bg-pdf-image').removeAttribute('href');
-                    this.cancelAction(); this.renderAll();
-                }
             },
 
             generateMargins() {
@@ -796,7 +872,7 @@
                             if (!this.state.selectedEntities.find(e => e.id === hit.id)) this.state.selectedEntities = [hit];
                         }
                         
-                        this.state.hasClonedInDrag = false; // Reset clone flag
+                        this.state.hasClonedInDrag = false; 
                         this.state.p1 = pos; 
                         this.state.isDrawing = true;
 
@@ -1037,7 +1113,6 @@
                         if (this.state.dragPointIndex !== -1 && this.state.selectedEntities[0].type === 'curve') {
                             this.state.selectedEntities[0].points[this.state.dragPointIndex] = pos;
                         } else {
-                            // Novedad V4.13: Duplicar al arrastrar con ALT
                             if ((evt.altKey || this.state.duplicateNextDrag) && !this.state.hasClonedInDrag) {
                                 this.saveState();
                                 let t = Date.now();
@@ -1045,7 +1120,7 @@
                                 this.state.selectedEntities.forEach((ent, index) => {
                                     let clone = JSON.parse(JSON.stringify(ent));
                                     clone.id = t + index;
-                                    this.data.push(clone); // Se inyecta la copia que nos llevamos arrastrando
+                                    this.data.push(clone); 
                                     newDragged.push(clone);
                                 });
                                 this.state.selectedEntities = newDragged;
@@ -1219,7 +1294,6 @@
                         this.layerGhost.innerHTML = '';
                         this.renderAll();
                     } else {
-                        // Reseteamos el comportamiento de copia para el siguiente clic
                         this.state.duplicateNextDrag = false;
                         this.saveState(); 
                     }
@@ -1309,21 +1383,43 @@
             redo() { if (this.redoHistory.length > 0) { this.history.push(JSON.stringify(this.data)); this.data = JSON.parse(this.redoHistory.pop()); this.cancelAction(); this.saveToStorage(); } },
             clearAll() { if(confirm("¿Borrar todo?")) { this.saveState(); this.data = []; document.getElementById('bg-pdf-image').removeAttribute('href'); this.cancelAction(); } },
             
-            saveToStorage() { localStorage.setItem('cad_model_v4_13', JSON.stringify({d: this.data, s: this.canvasSize})); },
-            loadFromStorage() { const s = localStorage.getItem('cad_model_v4_13'); if (s) { let p = JSON.parse(s); this.data = p.d; if(p.s) { this.canvasSize = p.s; this.updateCanvas(); } this.renderAll(); } },
+            saveToStorage() { 
+                this.syncCurrentPage();
+                localStorage.setItem('cad_model_v4_14', JSON.stringify({pages: this.pages, cur: this.currentPage, s: this.canvasSize})); 
+            },
+            loadFromStorage() { 
+                const s = localStorage.getItem('cad_model_v4_14'); 
+                if (s) { 
+                    let p = JSON.parse(s); 
+                    if (p.pages) this.pages = p.pages;
+                    if (p.cur !== undefined) this.currentPage = p.cur;
+                    if (p.s) { this.canvasSize = p.s; this.updateCanvas(); } 
+                    this.loadCurrentPage(); 
+                } else {
+                    this.pages = [{ data: [], history: [], redoHistory: [], bgImage: null }];
+                    this.currentPage = 0;
+                    this.loadCurrentPage();
+                }
+            },
 
             saveToFile() {
-                const blob = new Blob([JSON.stringify({data: this.data, size: this.canvasSize})], {type: "application/json"});
+                this.syncCurrentPage();
+                let fileName = prompt("Nombre del archivo a guardar:", "Lamina_Educacion_Plastica");
+                if (!fileName) return;
+                const blob = new Blob([JSON.stringify({pages: this.pages, size: this.canvasSize})], {type: "application/json"});
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = 'Lamina_Educacion_Plastica.json'; a.click();
+                const a = document.createElement('a'); a.href = url; a.download = fileName + '.json'; a.click();
             },
             loadFromFile(evt) {
                 const file = evt.target.files[0]; if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    let p = JSON.parse(e.target.result); this.saveState(); this.data = p.data;
+                    let p = JSON.parse(e.target.result); 
+                    if (p.data) { this.pages = [{ data: p.data, history: [], redoHistory: [], bgImage: null }]; } 
+                    else if (p.pages) { this.pages = p.pages; }
+                    this.currentPage = 0;
                     if(p.size) { this.canvasSize = p.size; this.updateCanvas(); }
-                    this.renderAll();
+                    this.loadCurrentPage();
                 }; reader.readAsText(file);
             },
 
@@ -1347,31 +1443,54 @@
                             const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
                             page.render({canvasContext: canvas.getContext('2d'), viewport: viewport}).promise.then(() => {
                                 document.getElementById('bg-pdf-image').setAttribute('href', canvas.toDataURL('image/png'));
+                                App.saveToStorage(); // Guarda la imagen inyectada
                             });
                         });
                     });
                 }; reader.readAsArrayBuffer(file);
             },
 
-            exportPDF() {
+            // --- NOVEDAD: EXPORTACIÓN PDF MULTIPÁGINA ---
+            async exportPDF() {
+                let pdfName = prompt("Nombre del archivo PDF:", "Lamina_Resuelta");
+                if (!pdfName) return;
+
+                this.syncCurrentPage();
+                this.snapIndicator.style.opacity = 0; this.state.hoverEntity = null; this.state.selectedEntities = []; 
+                
                 const { jsPDF } = window.jspdf;
                 let orientation = this.canvasSize.w > this.canvasSize.h ? 'l' : 'p';
                 const doc = new jsPDF(orientation, 'mm', [this.canvasSize.w, this.canvasSize.h]);
                 
-                this.snapIndicator.style.opacity = 0; this.state.hoverEntity = null; this.state.selectedEntities = []; this.renderAll();
+                let originalPage = this.currentPage;
+
+                for (let i = 0; i < this.pages.length; i++) {
+                    this.currentPage = i;
+                    this.loadCurrentPage();
+                    await new Promise(resolve => setTimeout(resolve, 50)); 
+                    
+                    await new Promise((resolve) => {
+                        const xml = new XMLSerializer().serializeToString(this.svg);
+                        const svg64 = btoa(unescape(encodeURIComponent(xml)));
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas'); const scale = 4;
+                            canvas.width = this.canvasSize.w * scale; canvas.height = this.canvasSize.h * scale;
+                            const ctx = canvas.getContext('2d');
+                            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            if (i > 0) doc.addPage([this.canvasSize.w, this.canvasSize.h], orientation);
+                            doc.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, this.canvasSize.w, this.canvasSize.h);
+                            resolve();
+                        }; 
+                        img.src = 'data:image/svg+xml;base64,' + svg64;
+                    });
+                }
                 
-                const xml = new XMLSerializer().serializeToString(this.svg);
-                const svg64 = btoa(unescape(encodeURIComponent(xml)));
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas'); const scale = 4;
-                    canvas.width = this.canvasSize.w * scale; canvas.height = this.canvasSize.h * scale;
-                    const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    doc.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, this.canvasSize.w, this.canvasSize.h);
-                    doc.save("Lamina_Resuelta.pdf");
-                }; img.src = 'data:image/svg+xml;base64,' + svg64;
+                doc.save(pdfName + ".pdf");
+                
+                this.currentPage = originalPage;
+                this.loadCurrentPage();
             },
 
             bindEvents() {
