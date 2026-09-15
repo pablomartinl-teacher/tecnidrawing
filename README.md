@@ -2,7 +2,7 @@
 
                  # 📐 Motor CAD - TecniDib
 
-![Versión](https://img.shields.io/badge/Versi%C3%B3n-4.10-blue?style=for-the-badge)
+![Versión](https://img.shields.io/badge/Versi%C3%B3n-4.11-blue?style=for-the-badge)
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 ![Licencia](https://img.shields.io/badge/Licencia-Open_Source-success?style=for-the-badge)
