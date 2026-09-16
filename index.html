@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TecniDib - V4.11</title>
+    <title>TecniDib - V4.15</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -67,7 +67,6 @@
             <button class="btn-action" onclick="App.changeCanvasSize()">📏 Tamaño Lámina</button>
             <span id="canvas-label" style="font-weight: bold; margin-right: 5px;">297 x 210 mm</span>
             
-            <!-- Novedad: Control Multi-página -->
             <div style="display: flex; align-items: center; background: #222; padding: 2px 6px; border-radius: 4px; gap: 5px; border: 1px solid #444;">
                 <button class="page-btn" onclick="App.prevPage()" title="Página Anterior">◀</button>
                 <span id="page-label" style="font-weight: bold; font-size: 12px; min-width: 50px; text-align: center;">Pág 1/1</span>
@@ -133,7 +132,7 @@
     </div>
 
     <aside id="toolbar">
-        <button class="tool-btn" data-tool="cursor" data-key="v" title="Seleccionar/Mover [Tecla: V] (Caja Selección, CTRL soltar imán/multiselección, ALT duplicar)"><svg viewBox="0 0 24 24"><path d="M5 4l14 10-5.5 1.5L16 21l-3-1-2.5-5.5L5 18z"/></svg></button>
+        <button class="tool-btn" data-tool="cursor" data-key="v" title="Seleccionar/Mover [Tecla: V] (Caja Selección, CTRL soltar imán/multiselección, ALT duplicar, SHIFT Mover Orto)"><svg viewBox="0 0 24 24"><path d="M5 4l14 10-5.5 1.5L16 21l-3-1-2.5-5.5L5 18z"/></svg></button>
         <button class="tool-btn active" data-tool="line" data-key="l" title="Segmento [Tecla: L] (Shift para Orto)"><svg viewBox="0 0 24 24"><line x1="4" y1="20" x2="20" y2="4"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg></button>
         <button class="tool-btn" data-tool="measure" data-key="m" title="Acotar ISO [Tecla: M] (1º Inicio, 2º Fin, 3º Lado)"><svg viewBox="0 0 24 24"><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="9" x2="2" y2="15"/><line x1="22" y1="9" x2="22" y2="15"/><text x="12" y="9" font-size="5" text-anchor="middle" fill="currentColor" stroke="none">mm</text></svg></button>
         <button class="tool-btn" data-tool="parallel" data-key="p" title="Paralela [Tecla: P]"><svg viewBox="0 0 24 24"><line x1="6" y1="22" x2="16" y2="2"/><line x1="10" y1="22" x2="20" y2="2"/></svg></button>
@@ -202,11 +201,9 @@
             snapIndicator: document.getElementById('snap-indicator'),
             coordDisplay: document.getElementById('coords'),
             
-            // NOVEDAD: Arquitectura Multidocumento
             pages: [{ data: [], history: [], redoHistory: [], bgImage: null }],
             currentPage: 0,
             
-            // Punteros a los datos activos (para no romper la lógica existente)
             data: [], 
             history: [], 
             redoHistory: [], 
@@ -241,7 +238,8 @@
                 cropRect: null,
                 isBoxSelecting: false,
                 duplicateNextDrag: false,   
-                hasClonedInDrag: false      
+                hasClonedInDrag: false,
+                dragStart: null // Novedad: Almacena inicio para mover ortogonalmente
             },
 
             snapTolerance: 4, 
@@ -254,6 +252,12 @@
                 
                 window.addEventListener('keydown', (e) => {
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+                    // Novedad: Control Desactiva Imán VISUALMENTE
+                    if (e.key === 'Control') {
+                        document.getElementById('btn-snap').classList.remove('snap-active');
+                        this.forceGhostUpdate();
+                    }
                     
                     if (!e.ctrlKey && !e.shiftKey && !e.altKey && /^[a-z]$/i.test(e.key)) {
                         if (e.key.toLowerCase() !== 'd') {
@@ -300,13 +304,17 @@
                 });
 
                 window.addEventListener('keyup', (e) => {
+                    // Novedad: Control Reactiva Imán VISUALMENTE
+                    if (e.key === 'Control') {
+                        if (this.config.snapEnabled) document.getElementById('btn-snap').classList.add('snap-active');
+                        this.forceGhostUpdate();
+                    }
                     if (e.key === 'Alt' || e.key.toLowerCase() === 'd') {
                         if (!this.state.isDrawing) this.state.duplicateNextDrag = false;
                     }
                 });
             },
 
-            // --- NOVEDAD: LÓGICA DE PÁGINAS MÚLTIPLES ---
             syncCurrentPage() {
                 this.pages[this.currentPage].data = [...this.data];
                 this.pages[this.currentPage].history = [...this.history];
@@ -721,8 +729,6 @@
             },
 
             calculateSnap(x, y) {
-                if (!this.config.snapEnabled) { this.snapIndicator.style.opacity = 0; return {x, y}; }
-
                 let bestSnap = null, minDistance = this.snapTolerance;
                 
                 this.data.forEach(ent => {
@@ -779,7 +785,8 @@
                 let clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
                 let rawX = (clientX - CTM.e) / CTM.a; let rawY = (clientY - CTM.f) / CTM.d;
                 
-                if (this.state.tool === 'cursor' && this.state.isDrawing && !this.state.isBoxSelecting && evt.ctrlKey) {
+                // Novedad: Control desactiva Imán
+                if (evt.ctrlKey || !this.config.snapEnabled) {
                     this.snapIndicator.style.opacity = 0;
                     return {x: rawX, y: rawY};
                 }
@@ -874,6 +881,7 @@
                         
                         this.state.hasClonedInDrag = false; 
                         this.state.p1 = pos; 
+                        this.state.dragStart = pos; // Novedad: Ancla para mover Ortogonalmente
                         this.state.isDrawing = true;
 
                         if (this.state.selectedEntities.length === 1 && hit.type === 'curve') {
@@ -1128,8 +1136,19 @@
                                 this.state.duplicateNextDrag = false;
                             }
 
-                            let dx = pos.x - this.state.p1.x; let dy = pos.y - this.state.p1.y;
-                            this.state.p1 = pos; 
+                            // NOVEDAD: Mover Ortogonalmente con Shift para cualquier elemento
+                            let curX = pos.x; let curY = pos.y;
+                            if (evt.shiftKey) {
+                                if (Math.abs(curX - this.state.dragStart.x) > Math.abs(curY - this.state.dragStart.y)) {
+                                    curY = this.state.dragStart.y;
+                                } else {
+                                    curX = this.state.dragStart.x;
+                                }
+                            }
+
+                            let dx = curX - this.state.p1.x; let dy = curY - this.state.p1.y;
+                            this.state.p1 = {x: curX, y: curY}; 
+                            
                             this.state.selectedEntities.forEach(e => {
                                 if(e.type === 'line' || e.type === 'measure') { e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; }
                                 else if(e.type === 'rect') { e.x+=dx; e.y+=dy; }
@@ -1385,10 +1404,10 @@
             
             saveToStorage() { 
                 this.syncCurrentPage();
-                localStorage.setItem('cad_model_v4_14', JSON.stringify({pages: this.pages, cur: this.currentPage, s: this.canvasSize})); 
+                localStorage.setItem('cad_model_v4_15', JSON.stringify({pages: this.pages, cur: this.currentPage, s: this.canvasSize})); 
             },
             loadFromStorage() { 
-                const s = localStorage.getItem('cad_model_v4_14'); 
+                const s = localStorage.getItem('cad_model_v4_15'); 
                 if (s) { 
                     let p = JSON.parse(s); 
                     if (p.pages) this.pages = p.pages;
@@ -1443,14 +1462,13 @@
                             const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
                             page.render({canvasContext: canvas.getContext('2d'), viewport: viewport}).promise.then(() => {
                                 document.getElementById('bg-pdf-image').setAttribute('href', canvas.toDataURL('image/png'));
-                                App.saveToStorage(); // Guarda la imagen inyectada
+                                App.saveToStorage(); 
                             });
                         });
                     });
                 }; reader.readAsArrayBuffer(file);
             },
 
-            // --- NOVEDAD: EXPORTACIÓN PDF MULTIPÁGINA ---
             async exportPDF() {
                 let pdfName = prompt("Nombre del archivo PDF:", "Lamina_Resuelta");
                 if (!pdfName) return;
