@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TecniDib - V4.18</title>
+    <title>TecniDib - V4.19</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -72,6 +72,7 @@
                 <span id="page-label" style="font-weight: bold; font-size: 12px; min-width: 50px; text-align: center;">Pág 1/1</span>
                 <button class="page-btn" onclick="App.nextPage()" title="Página Siguiente">▶</button>
                 <button class="btn-action btn-success" style="padding: 2px 6px;" onclick="App.addPage()" title="Nueva Página Independiente">➕</button>
+                <button class="btn-action" style="padding: 2px 6px; background: #e67e22;" onclick="App.movePage()" title="Reorganizar (Mover esta página a otra posición)">🔄</button>
                 <button class="btn-action btn-danger" style="padding: 2px 6px;" onclick="App.deletePage()" title="Borrar Página Actual">🗑️</button>
             </div>
 
@@ -239,12 +240,12 @@
                 isBoxSelecting: false,
                 duplicateNextDrag: false,   
                 hasClonedInDrag: false,
-                dragStart: null 
+                dragStart: null,
+                clipboard: [] // Novedad: Portapapeles para Copy/Paste
             },
 
             snapTolerance: 4, 
 
-            // --- NOVEDAD: Base de Datos Local Ilimitada (IndexedDB) ---
             DB: {
                 dbName: 'CAD_Plastica_DB',
                 storeName: 'cad_store',
@@ -298,17 +299,66 @@
                     }
                     
                     if (!e.ctrlKey && !e.shiftKey && !e.altKey && /^[a-z]$/i.test(e.key)) {
-                        if (e.key.toLowerCase() !== 'd') {
+                        if (e.key.toLowerCase() !== 'd' && e.key.toLowerCase() !== 'c' && e.key.toLowerCase() !== 'v') {
                             const btn = document.querySelector(`.tool-btn[data-key="${e.key.toLowerCase()}"]`);
                             if (btn) { btn.click(); return; }
                         }
                     }
 
-                    if ((e.key === 'Alt' || e.key.toLowerCase() === 'd') && !e.repeat) {
+                    if ((e.key === 'Alt' || e.key.toLowerCase() === 'd') && !e.repeat && !e.ctrlKey) {
                         e.preventDefault();
                         this.state.duplicateNextDrag = true;
                         if (this.state.isDrawing && this.state.tool === 'cursor' && !this.state.isBoxSelecting) {
                             this.forceGhostUpdate();
+                        }
+                    }
+
+                    // --- NOVEDAD: COPY (Ctrl + C) ---
+                    if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+                        let targets = [];
+                        if (this.state.hoverEntity) targets.push(this.state.hoverEntity);
+                        else if (this.state.selectedEntities.length > 0) targets = this.state.selectedEntities;
+                        
+                        if (targets.length > 0) {
+                            e.preventDefault();
+                            this.state.clipboard = JSON.parse(JSON.stringify(targets));
+                            const st = document.getElementById('save-status');
+                            if (st) { st.innerText = "📋 Copiado"; st.style.color = "#0F9D58"; setTimeout(() => {st.innerText = "";}, 2000); }
+                        }
+                    }
+
+                    // --- NOVEDAD: PASTE (Ctrl + V) ---
+                    if (e.ctrlKey && e.key.toLowerCase() === 'v') {
+                        if (this.state.clipboard && this.state.clipboard.length > 0) {
+                            e.preventDefault();
+                            this.saveState();
+                            let t = Date.now();
+                            let newSelection = [];
+                            let off = 10;
+                            
+                            this.state.clipboard.forEach(clone => {
+                                if (clone.type === 'line' || clone.type === 'measure') { clone.x1+=off; clone.y1+=off; clone.x2+=off; clone.y2+=off; }
+                                else if (clone.type === 'rect') { clone.x+=off; clone.y+=off; }
+                                else if (clone.type === 'circle' || clone.type === 'polygon' || clone.type === 'arc') { clone.cx+=off; clone.cy+=off; }
+                                else if (clone.type === 'point' || clone.type === 'text' || clone.type === 'tag' || clone.type === 'image') { clone.x+=off; clone.y+=off; }
+                                else if (clone.type === 'curve' || clone.type === 'fill') { clone.points.forEach(p => { p.x+=off; p.y+=off; }); }
+                            });
+
+                            this.state.clipboard.forEach((ent, index) => {
+                                let clone = JSON.parse(JSON.stringify(ent));
+                                clone.id = t + index;
+                                this.data.push(clone);
+                                newSelection.push(clone);
+                            });
+                            
+                            if (this.state.tool !== 'cursor') {
+                                document.querySelector('.tool-btn[data-tool="cursor"]').click();
+                            }
+                            this.state.selectedEntities = newSelection;
+                            this.renderAll();
+                            
+                            const st = document.getElementById('save-status');
+                            if (st) { st.innerText = "📋 Pegado"; st.style.color = "#0F9D58"; setTimeout(() => {st.innerText = "";}, 2000); }
                         }
                     }
                     
@@ -371,6 +421,27 @@
                 document.getElementById('page-label').innerText = `Pág ${this.currentPage + 1}/${this.pages.length}`;
                 this.cancelAction();
                 this.renderAll();
+            },
+
+            // --- NOVEDAD: MOVER PÁGINA ---
+            movePage() {
+                if (this.pages.length <= 1) {
+                    alert("Necesitas más de una página para reorganizarlas.");
+                    return;
+                }
+                let input = prompt(`Mover página actual (Pág ${this.currentPage + 1}) a la posición (1 a ${this.pages.length}):`, this.currentPage + 1);
+                if (!input) return;
+                let newPos = parseInt(input) - 1;
+                if (!isNaN(newPos) && newPos >= 0 && newPos < this.pages.length && newPos !== this.currentPage) {
+                    this.syncCurrentPage();
+                    let pageToMove = this.pages.splice(this.currentPage, 1)[0];
+                    this.pages.splice(newPos, 0, pageToMove);
+                    this.currentPage = newPos;
+                    this.loadCurrentPage();
+                    this.saveToStorage();
+                } else if (newPos !== this.currentPage) {
+                    alert("Posición no válida.");
+                }
             },
 
             addPage() {
@@ -630,15 +701,6 @@
                 this.cancelAction();
             },
 
-            newCanvas() {
-                if(confirm('¿Crear nuevo lienzo en blanco? Se perderán todas las páginas no guardadas.')) {
-                    this.pages = [{ data: [], history: [], redoHistory: [], bgImage: null }];
-                    this.currentPage = 0;
-                    this.loadCurrentPage();
-                    this.saveToStorage();
-                }
-            },
-
             generateMargins() {
                 let mode = prompt("Generador de Márgenes:\n[1] Márgenes desde el papel (ej. 20mm izquierda)\n[2] Medida exacta Ancho x Alto", "1");
                 let x, y, rw, rh;
@@ -775,8 +837,6 @@
             },
 
             calculateSnap(x, y) {
-                if (!this.config.snapEnabled) { this.snapIndicator.style.opacity = 0; return {x, y}; }
-
                 let bestSnap = null, minDistance = this.snapTolerance;
                 
                 this.data.forEach(ent => {
@@ -1420,7 +1480,7 @@
                         this.layerSolucion.innerHTML += `<polygon points="${pts.join(' ')}" fill="${s.fillColor !== '#ffffff' ? s.fillColor : 'none'}" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
                     } else if (ent.type === 'arc') {
                         let sweep = ent.sweepAngle !== undefined ? ent.sweepAngle : (ent.endAngle - ent.startAngle < 0 ? ent.endAngle - ent.startAngle + 2 * Math.PI : ent.endAngle - ent.startAngle);
-                        let pathData = this.getSvgArcPath(ent.cx, ent.cy, ent.r, ent.startAngle, sweep);
+                        let pathData = this.getSvgArcPath(ent.cx, cy, ent.r, ent.startAngle, sweep);
                         this.layerSolucion.innerHTML += `<path d="${pathData}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
                     } else if (ent.type === 'curve') {
                         let pathData = this.smoothPath(ent.points);
