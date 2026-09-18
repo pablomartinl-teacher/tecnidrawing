@@ -3,15 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TecniDib - V4.17</title>
+    <title>TecniDib - V4.18</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
-    
-    <!-- Scripts Oficiales de Google Drive y Autenticación -->
-    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
     
     <style>
         :root { --bg-app: #1e1e1e; --bg-panel: #2d2d2d; --text-main: #ffffff; --accent: #007acc; --border: #444444; --canvas-bg: #f5f5f5; }
@@ -60,10 +56,6 @@
         #crop-canvas { cursor: crosshair; display: block; }
         .crop-controls { margin-top: 20px; display: flex; gap: 15px; }
         
-        #drive-modal { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#2d2d2d; padding:20px; border:1px solid #555; z-index:3000; border-radius:8px; width: 350px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);}
-        .drive-item { padding: 10px; border-bottom: 1px solid #444; cursor: pointer; transition: background 0.2s; }
-        .drive-item:hover { background: #007acc; }
-
         .page-btn { padding: 2px 6px; background: transparent; border: 1px solid #555; color: white; border-radius: 3px; cursor: pointer;}
         .page-btn:hover { background: #555;}
     </style>
@@ -90,21 +82,16 @@
             <span id="save-status" style="margin-left: 10px; color: #888; font-size: 12px;"></span>
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
+            <span id="coords" style="color: var(--accent); font-family: monospace; margin-right:10px;">X: 0.0, Y: 0.0</span>
             
-            <!-- Botones Nube -->
-            <button class="btn-action" onclick="App.Drive.save()" style="background: #4285F4;" title="Guardar en Google Drive">☁️ Guardar Drive</button>
-            <button class="btn-action" onclick="App.Drive.load()" style="background: #0F9D58;" title="Abrir desde Google Drive">☁️ Abrir Drive</button>
-            
-            <div style="border-left: 1px solid var(--border); height: 20px; margin: 0 2px;"></div>
-
+            <button class="btn-action btn-success" onclick="App.generateMargins()">🔲 Márgenes</button>
             <button class="btn-action" onclick="document.getElementById('pdf-upload').click()" title="Carga un PDF como fondo completo">📥 PDF Base</button>
             <input type="file" id="pdf-upload" accept="application/pdf" style="display:none" onchange="App.importPDF(event)">
-            
-            <button class="btn-action" onclick="document.getElementById('crop-upload').click()" style="background: #e67e22;" title="Sube una Imagen o PDF para recortar un trozo y pegarlo">✂️ Añadir Recorte</button>
+            <button class="btn-action" onclick="document.getElementById('crop-upload').click()" style="background: #e67e22;" title="Sube Imagen/PDF para recortar y pegar">✂️ Recorte</button>
             <input type="file" id="crop-upload" accept="image/*,application/pdf" style="display:none" onchange="App.handleCropFile(event)">
 
-            <button class="btn-action" onclick="App.saveToFile()">💾 Descargar</button>
-            <button class="btn-action" onclick="document.getElementById('json-upload').click()">📂 Subir Local</button>
+            <button class="btn-action" onclick="App.saveToFile()" style="background: #007acc;">💾 Descargar Archivo</button>
+            <button class="btn-action" onclick="document.getElementById('json-upload').click()" style="background: #007acc;">📂 Abrir Archivo</button>
             <input type="file" id="json-upload" accept=".json" style="display:none" onchange="App.loadFromFile(event)">
             
             <button class="btn-action" onclick="App.undo()">↩</button>
@@ -204,22 +191,9 @@
                 <button class="btn-action btn-success" onclick="App.confirmCrop()">✂️ Recortar y Añadir</button>
             </div>
         </div>
-        
-        <!-- Modal Drive -->
-        <div id="drive-modal">
-            <h3 style="color:white; margin-bottom:15px;">Archivos en tu Drive</h3>
-            <ul id="drive-file-list" style="list-style:none; padding:0; max-height:300px; overflow-y:auto; color:white; margin-bottom: 15px;"></ul>
-            <div style="display:flex; justify-content:flex-end;">
-                <button class="btn-action btn-danger" onclick="document.getElementById('drive-modal').style.display='none'">Cancelar</button>
-            </div>
-        </div>
     </main>
 
     <script>
-        // Funciones Globales para cargar las APIs de Google
-        window.gapiLoaded = function() { gapi.load('client', App.Drive.initGapi); }
-        window.gisLoaded = function() { App.Drive.initGis(); }
-
         const App = {
             svg: document.getElementById('dibujo-svg'),
             layerSolucion: document.getElementById('layer-solucion'),
@@ -270,127 +244,42 @@
 
             snapTolerance: 4, 
 
-            // --- NOVEDAD: MÓDULO GOOGLE DRIVE ---
-            Drive: {
-                // IMPORTANTE: ¡DEBES SUSTITUIR ESTAS DOS LÍNEAS POR TUS CLAVES!
-                CLIENT_ID: 'PON_TU_CLIENT_ID_AQUI',
-                API_KEY: 'PON_TU_API_KEY_AQUI',
-                
-                DISCOVERY_DOCS: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-                SCOPES: 'https://www.googleapis.com/auth/drive.file', // Acceso solo a los archivos creados por el motor CAD
-                tokenClient: null,
-                gapiInited: false,
-                gisInited: false,
-                accessToken: null,
-
-                initGapi() {
-                    gapi.client.init({ apiKey: App.Drive.API_KEY, discoveryDocs: App.Drive.DISCOVERY_DOCS })
-                    .then(() => { App.Drive.gapiInited = true; })
-                    .catch(err => console.error("Error GAPI:", err));
-                },
-                initGis() {
-                    App.Drive.tokenClient = google.accounts.oauth2.initTokenClient({
-                        client_id: App.Drive.CLIENT_ID,
-                        scope: App.Drive.SCOPES,
-                        callback: '', // Se define dinámicamente
-                    });
-                    App.Drive.gisInited = true;
-                },
-                authenticate(callback) {
-                    if (App.Drive.CLIENT_ID === 'PON_TU_CLIENT_ID_AQUI') {
-                        alert("⚠️ Debes configurar tu CLIENT_ID y API_KEY en el código HTML para usar Google Drive.");
-                        return;
-                    }
-                    if (App.Drive.accessToken) { callback(); return; }
-                    App.Drive.tokenClient.callback = async (resp) => {
-                        if (resp.error) { console.error(resp); return; }
-                        App.Drive.accessToken = resp.access_token;
-                        callback();
-                    };
-                    if (gapi.client.getToken() === null) {
-                        App.Drive.tokenClient.requestAccessToken({prompt: 'consent'});
-                    } else {
-                        App.Drive.tokenClient.requestAccessToken({prompt: ''});
-                    }
-                },
-                save() {
-                    App.Drive.authenticate(async () => {
-                        const status = document.getElementById('save-status');
-                        status.innerText = "☁️ Guardando..."; status.style.color = "#4285F4";
-                        
-                        App.syncCurrentPage();
-                        let fileName = prompt("Nombre para guardar en Google Drive:", "Lamina_Educacion_Plastica");
-                        if (!fileName) { status.innerText = ""; return; }
-                        if (!fileName.endsWith('.json')) fileName += '.json';
-
-                        const fileContent = JSON.stringify({pages: App.pages, size: App.canvasSize});
-                        const file = new Blob([fileContent], {type: 'application/json'});
-                        const metadata = { name: fileName, mimeType: 'application/json' };
-                        
-                        const form = new FormData();
-                        form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
-                        form.append('file', file);
-                        
-                        try {
-                            let res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-                                method: 'POST',
-                                headers: new Headers({ 'Authorization': 'Bearer ' + App.Drive.accessToken }),
-                                body: form
-                            });
-                            if(res.ok) {
-                                status.innerText = "✅ Guardado en Drive"; status.style.color = "#0F9D58";
-                                setTimeout(() => { status.innerText = ""; }, 4000);
-                            } else { throw new Error("Error en subida"); }
-                        } catch(e) {
-                            status.innerText = "❌ Error en Drive"; status.style.color = "red";
-                        }
-                    });
-                },
-                load() {
-                    App.Drive.authenticate(async () => {
-                        try {
-                            let response = await gapi.client.drive.files.list({
-                                'pageSize': 30,
-                                'fields': 'files(id, name)',
-                                'q': "mimeType='application/json' and trashed=false"
-                            });
-                            let files = response.result.files;
-                            let listUI = document.getElementById('drive-file-list');
-                            listUI.innerHTML = '';
-                            if (files && files.length > 0) {
-                                files.forEach(file => {
-                                    let li = document.createElement('li');
-                                    li.className = "drive-item";
-                                    li.innerHTML = `📄 ${file.name}`;
-                                    li.onclick = () => App.Drive.downloadFile(file.id);
-                                    listUI.appendChild(li);
-                                });
-                            } else {
-                                listUI.innerHTML = '<li>No se han encontrado láminas en tu Drive.</li>';
+            // --- NOVEDAD: Base de Datos Local Ilimitada (IndexedDB) ---
+            DB: {
+                dbName: 'CAD_Plastica_DB',
+                storeName: 'cad_store',
+                init() {
+                    return new Promise((resolve, reject) => {
+                        let request = indexedDB.open(this.dbName, 1);
+                        request.onupgradeneeded = (e) => {
+                            let db = e.target.result;
+                            if (!db.objectStoreNames.contains(this.storeName)) {
+                                db.createObjectStore(this.storeName);
                             }
-                            document.getElementById('drive-modal').style.display = 'block';
-                        } catch(err) {
-                            alert("Error al leer archivos de Drive.");
-                        }
+                        };
+                        request.onsuccess = (e) => resolve(e.target.result);
+                        request.onerror = (e) => reject(e.target.error);
                     });
                 },
-                async downloadFile(fileId) {
-                    document.getElementById('drive-modal').style.display = 'none';
-                    const status = document.getElementById('save-status');
-                    status.innerText = "☁️ Abriendo..."; status.style.color = "#0F9D58";
-                    try {
-                        let response = await gapi.client.drive.files.get({ fileId: fileId, alt: 'media' });
-                        let p = response.result;
-                        if (p.data) { App.pages = [{ data: p.data, history: [], redoHistory: [], bgImage: null }]; } 
-                        else if (p.pages) { App.pages = p.pages; }
-                        App.currentPage = 0;
-                        if(p.size) { App.canvasSize = p.size; App.updateCanvas(); }
-                        App.loadCurrentPage();
-                        status.innerText = "✅ Lámina Abierta";
-                        setTimeout(() => { status.innerText = ""; }, 4000);
-                    } catch(err) {
-                        status.innerText = "❌ Error al abrir"; status.style.color = "red";
-                    }
+                async save(key, data) {
+                    let db = await this.init();
+                    return new Promise((resolve, reject) => {
+                        let tx = db.transaction(this.storeName, 'readwrite');
+                        let store = tx.objectStore(this.storeName);
+                        store.put(data, key);
+                        tx.oncomplete = () => resolve();
+                        tx.onerror = () => reject(tx.error);
+                    });
+                },
+                async load(key) {
+                    let db = await this.init();
+                    return new Promise((resolve, reject) => {
+                        let tx = db.transaction(this.storeName, 'readonly');
+                        let store = tx.objectStore(this.storeName);
+                        let req = store.get(key);
+                        req.onsuccess = () => resolve(req.result);
+                        req.onerror = () => reject(req.error);
+                    });
                 }
             },
 
@@ -440,7 +329,6 @@
                     if (e.key === 'Escape') {
                         if(document.getElementById('crop-modal').style.display === 'flex') { this.closeCropper(); return; }
                         if(document.getElementById('edit-modal').style.display === 'block') { this.closeEditModal(); return; }
-                        if(document.getElementById('drive-modal').style.display === 'block') { document.getElementById('drive-modal').style.display='none'; return; }
                         this.cancelAction();
                     }
                     
@@ -740,6 +628,15 @@
 
                 this.state.keyboardInput = "";
                 this.cancelAction();
+            },
+
+            newCanvas() {
+                if(confirm('¿Crear nuevo lienzo en blanco? Se perderán todas las páginas no guardadas.')) {
+                    this.pages = [{ data: [], history: [], redoHistory: [], bgImage: null }];
+                    this.currentPage = 0;
+                    this.loadCurrentPage();
+                    this.saveToStorage();
+                }
             },
 
             generateMargins() {
@@ -1555,26 +1452,29 @@
             redo() { if (this.redoHistory.length > 0) { this.history.push(JSON.stringify(this.data)); this.data = JSON.parse(this.redoHistory.pop()); this.cancelAction(); this.saveToStorage(); } },
             clearAll() { if(confirm("¿Borrar todo?")) { this.saveState(); this.data = []; document.getElementById('bg-pdf-image').removeAttribute('href'); this.cancelAction(); } },
             
-            saveToStorage() { 
+            async saveToStorage() { 
                 this.syncCurrentPage();
                 try {
-                    localStorage.setItem('cad_model_v4_17', JSON.stringify({pages: this.pages, cur: this.currentPage, s: this.canvasSize})); 
+                    await App.DB.save('cad_state', {pages: this.pages, cur: this.currentPage, s: this.canvasSize});
                     const st = document.getElementById('save-status');
-                    if (st) { st.innerText = ""; st.style.color = "#888"; }
+                    if (st) { st.innerText = "✅ Autoguardado"; st.style.color = "#0F9D58"; setTimeout(() => {st.innerText = "";}, 2000); }
                 } catch(e) {
-                    const st = document.getElementById('save-status');
-                    if (st) { st.innerText = "⚠️ Caché llena: Guarda tu archivo JSON"; st.style.color = "#ff5555"; }
+                    console.error("Error IndexedDB:", e);
                 }
             },
-            loadFromStorage() { 
-                const s = localStorage.getItem('cad_model_v4_17'); 
-                if (s) { 
-                    let p = JSON.parse(s); 
-                    if (p.pages) this.pages = p.pages;
-                    if (p.cur !== undefined) this.currentPage = p.cur;
-                    if (p.s) { this.canvasSize = p.s; this.updateCanvas(); } 
-                    this.loadCurrentPage(); 
-                } else {
+            async loadFromStorage() { 
+                try {
+                    let p = await App.DB.load('cad_state');
+                    if (p) { 
+                        if (p.pages) this.pages = p.pages;
+                        if (p.cur !== undefined) this.currentPage = p.cur;
+                        if (p.s) { this.canvasSize = p.s; this.updateCanvas(); } 
+                    } else {
+                        this.pages = [{ data: [], history: [], redoHistory: [], bgImage: null }];
+                        this.currentPage = 0;
+                    }
+                    this.loadCurrentPage();
+                } catch (e) {
                     this.pages = [{ data: [], history: [], redoHistory: [], bgImage: null }];
                     this.currentPage = 0;
                     this.loadCurrentPage();
@@ -1592,13 +1492,14 @@
             loadFromFile(evt) {
                 const file = evt.target.files[0]; if (!file) return;
                 const reader = new FileReader();
-                reader.onload = (e) => {
+                reader.onload = async (e) => {
                     let p = JSON.parse(e.target.result); 
                     if (p.data) { this.pages = [{ data: p.data, history: [], redoHistory: [], bgImage: null }]; } 
                     else if (p.pages) { this.pages = p.pages; }
                     this.currentPage = 0;
                     if(p.size) { this.canvasSize = p.size; this.updateCanvas(); }
                     this.loadCurrentPage();
+                    await this.saveToStorage();
                 }; reader.readAsText(file);
             },
 
