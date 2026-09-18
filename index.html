@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TecniDib - V4.19</title>
+    <title>TecniDib - V4.20</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -241,10 +241,11 @@
                 duplicateNextDrag: false,   
                 hasClonedInDrag: false,
                 dragStart: null,
-                clipboard: [] // Novedad: Portapapeles para Copy/Paste
+                clipboard: [] 
             },
 
             snapTolerance: 4, 
+            saveTimer: null, // Novedad: Control del Debounce para optimizar el rendimiento de guardado
 
             DB: {
                 dbName: 'CAD_Plastica_DB',
@@ -298,11 +299,10 @@
                         this.forceGhostUpdate();
                     }
                     
+                    // Novedad: Arreglada la condición para que C y V funcionen siempre como herramientas cuando NO se pulsa Ctrl
                     if (!e.ctrlKey && !e.shiftKey && !e.altKey && /^[a-z]$/i.test(e.key)) {
-                        if (e.key.toLowerCase() !== 'd' && e.key.toLowerCase() !== 'c' && e.key.toLowerCase() !== 'v') {
-                            const btn = document.querySelector(`.tool-btn[data-key="${e.key.toLowerCase()}"]`);
-                            if (btn) { btn.click(); return; }
-                        }
+                        const btn = document.querySelector(`.tool-btn[data-key="${e.key.toLowerCase()}"]`);
+                        if (btn) { btn.click(); return; }
                     }
 
                     if ((e.key === 'Alt' || e.key.toLowerCase() === 'd') && !e.repeat && !e.ctrlKey) {
@@ -313,7 +313,6 @@
                         }
                     }
 
-                    // --- NOVEDAD: COPY (Ctrl + C) ---
                     if (e.ctrlKey && e.key.toLowerCase() === 'c') {
                         let targets = [];
                         if (this.state.hoverEntity) targets.push(this.state.hoverEntity);
@@ -327,7 +326,6 @@
                         }
                     }
 
-                    // --- NOVEDAD: PASTE (Ctrl + V) ---
                     if (e.ctrlKey && e.key.toLowerCase() === 'v') {
                         if (this.state.clipboard && this.state.clipboard.length > 0) {
                             e.preventDefault();
@@ -423,7 +421,6 @@
                 this.renderAll();
             },
 
-            // --- NOVEDAD: MOVER PÁGINA ---
             movePage() {
                 if (this.pages.length <= 1) {
                     alert("Necesitas más de una página para reorganizarlas.");
@@ -1480,7 +1477,7 @@
                         this.layerSolucion.innerHTML += `<polygon points="${pts.join(' ')}" fill="${s.fillColor !== '#ffffff' ? s.fillColor : 'none'}" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
                     } else if (ent.type === 'arc') {
                         let sweep = ent.sweepAngle !== undefined ? ent.sweepAngle : (ent.endAngle - ent.startAngle < 0 ? ent.endAngle - ent.startAngle + 2 * Math.PI : ent.endAngle - ent.startAngle);
-                        let pathData = this.getSvgArcPath(ent.cx, cy, ent.r, ent.startAngle, sweep);
+                        let pathData = this.getSvgArcPath(ent.cx, ent.cy, ent.r, ent.startAngle, sweep);
                         this.layerSolucion.innerHTML += `<path d="${pathData}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
                     } else if (ent.type === 'curve') {
                         let pathData = this.smoothPath(ent.points);
@@ -1514,13 +1511,18 @@
             
             async saveToStorage() { 
                 this.syncCurrentPage();
-                try {
-                    await App.DB.save('cad_state', {pages: this.pages, cur: this.currentPage, s: this.canvasSize});
-                    const st = document.getElementById('save-status');
-                    if (st) { st.innerText = "✅ Autoguardado"; st.style.color = "#0F9D58"; setTimeout(() => {st.innerText = "";}, 2000); }
-                } catch(e) {
-                    console.error("Error IndexedDB:", e);
-                }
+                
+                // NOVEDAD: DEBOUNCE (Autoguardado diferido para evitar colapsos al dibujar en muchas páginas)
+                if (this.saveTimer) clearTimeout(this.saveTimer);
+                this.saveTimer = setTimeout(async () => {
+                    try {
+                        await App.DB.save('cad_state', {pages: this.pages, cur: this.currentPage, s: this.canvasSize});
+                        const st = document.getElementById('save-status');
+                        if (st) { st.innerText = "✅ Autoguardado"; st.style.color = "#0F9D58"; setTimeout(() => {st.innerText = "";}, 2000); }
+                    } catch(e) {
+                        console.error("Error IndexedDB:", e);
+                    }
+                }, 600); // Espera 600ms sin hacer nada antes de guardar la base de datos pesada
             },
             async loadFromStorage() { 
                 try {
