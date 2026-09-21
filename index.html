@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TecniDib - V4.20</title>
+    <title>TecniDib - V4.21</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -29,7 +29,7 @@
         .btn-success { background: #2e7d32; }
         .btn-success:hover { background: #1b5e20; }
         
-        select, input[type="number"], input[type="text"] { background: #1e1e1e; color: white; border: 1px solid var(--border); padding: 4px; border-radius: 3px; }
+        select, input[type="number"], input[type="text"], textarea { background: #1e1e1e; color: white; border: 1px solid var(--border); padding: 4px; border-radius: 3px; font-family: 'Segoe UI', sans-serif;}
         input[type="color"] { cursor: pointer; border: none; background: transparent; height: 26px; width: 30px; padding: 0; }
 
         #toolbar { grid-area: toolbar; background-color: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 5px; overflow-y: auto; }
@@ -46,7 +46,7 @@
         #snap-indicator { fill: rgba(255,0,0,0.2); stroke: red; stroke-width: 1.5; opacity: 0; pointer-events: none; }
         .selection-rect { fill: rgba(0, 122, 204, 0.2); stroke: #007acc; stroke-dasharray: 4,4; stroke-width: 1; }
 
-        #edit-modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border: 1px solid #555; z-index: 1000; box-shadow: 0 4px 30px rgba(0,0,0,0.8); border-radius: 8px; width: 300px; }
+        #edit-modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border: 1px solid #555; z-index: 1000; box-shadow: 0 4px 30px rgba(0,0,0,0.8); border-radius: 8px; width: 320px; }
         #edit-modal h3 { margin-bottom: 15px; color: var(--accent); font-size: 16px; }
         #edit-fields { display: flex; flex-direction: column; gap: 12px; }
         #edit-fields label { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
@@ -130,6 +130,15 @@
         <label id="poly-prop" style="display:none; color: var(--accent); font-weight:bold;">
             Lados Polígono: <input type="number" id="prop-poly-sides" min="3" max="20" value="5" style="width: 45px;">
         </label>
+        <!-- Novedad: Selector de Símbolo -->
+        <label id="symbol-prop" style="display:none; color: var(--accent); font-weight:bold;">
+            Símbolo: 
+            <select id="prop-symbol-type" style="width: 110px;">
+                <option value="perp">Perpendicular (⟂)</option>
+                <option value="para">Paralelo (//)</option>
+                <option value="coin">Coincidente (≡)</option>
+            </select>
+        </label>
     </div>
 
     <aside id="toolbar">
@@ -144,8 +153,10 @@
         <button class="tool-btn" data-tool="curve" data-key="s" title="Spline [Tecla: S]"><svg viewBox="0 0 24 24"><path d="M3 12 C 8 4, 16 20, 21 12"/><circle cx="3" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="21" cy="12" r="1.5"/></svg></button>
         <button class="tool-btn" data-tool="polygon" data-key="g" title="Polígono [Tecla: G]"><svg viewBox="0 0 24 24"><polygon points="12,2 22,9 18,21 6,21 2,9"/></svg></button>
         <button class="tool-btn" data-tool="fill" data-key="f" title="Relleno / Rayado [Tecla: F]"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18"/><line x1="3" y1="18" x2="9" y2="24"/><line x1="3" y1="12" x2="15" y2="24"/><line x1="3" y1="6" x2="21" y2="24"/><line x1="9" y1="3" x2="24" y2="18"/></svg></button>
+        <!-- Novedad: Botón de Símbolos -->
+        <button class="tool-btn" data-tool="symbol" data-key="w" title="Símbolos ISO [Tecla: W]"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor"/></svg></button>
         <button class="tool-btn" data-tool="point" data-key="x" title="Punto [Tecla: X]"><svg viewBox="0 0 24 24"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg></button>
-        <button class="tool-btn" data-tool="text" data-key="t" title="Texto Libre [Tecla: T]"><svg viewBox="0 0 24 24"><path d="M4 6h16 M12 6v14 M10 20h4"/></svg></button>
+        <button class="tool-btn" data-tool="text" data-key="t" title="Texto Párrafo [Tecla: T] (Dibuja caja para texto multilínea)"><svg viewBox="0 0 24 24"><path d="M4 6h16 M12 6v14 M10 20h4"/></svg></button>
         <button class="tool-btn" data-tool="tag" data-key="e" title="Etiqueta Orientada [Tecla: E]"><svg viewBox="0 0 24 24"><path d="M12 2 L22 12 L12 22 L2 12 Z"/><circle cx="12" cy="12" r="2"/></svg></button>
         <button class="tool-btn" data-tool="eraser" data-key="b" title="Borrador [Tecla: B] (Clic o Caja)"><svg viewBox="0 0 24 24"><path d="M18 13l-6 6-7-7 6-6M12 7l5 5 M3 21h18"/></svg></button>
     </aside>
@@ -245,7 +256,7 @@
             },
 
             snapTolerance: 4, 
-            saveTimer: null, // Novedad: Control del Debounce para optimizar el rendimiento de guardado
+            saveTimer: null, 
 
             DB: {
                 dbName: 'CAD_Plastica_DB',
@@ -292,17 +303,18 @@
                 this.loadFromStorage();
                 
                 window.addEventListener('keydown', (e) => {
-                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
 
                     if (e.key === 'Control') {
                         document.getElementById('btn-snap').classList.remove('snap-active');
                         this.forceGhostUpdate();
                     }
                     
-                    // Novedad: Arreglada la condición para que C y V funcionen siempre como herramientas cuando NO se pulsa Ctrl
                     if (!e.ctrlKey && !e.shiftKey && !e.altKey && /^[a-z]$/i.test(e.key)) {
-                        const btn = document.querySelector(`.tool-btn[data-key="${e.key.toLowerCase()}"]`);
-                        if (btn) { btn.click(); return; }
+                        if (e.key.toLowerCase() !== 'd' && e.key.toLowerCase() !== 'c' && e.key.toLowerCase() !== 'v') {
+                            const btn = document.querySelector(`.tool-btn[data-key="${e.key.toLowerCase()}"]`);
+                            if (btn) { btn.click(); return; }
+                        }
                     }
 
                     if ((e.key === 'Alt' || e.key.toLowerCase() === 'd') && !e.repeat && !e.ctrlKey) {
@@ -338,7 +350,7 @@
                                 if (clone.type === 'line' || clone.type === 'measure') { clone.x1+=off; clone.y1+=off; clone.x2+=off; clone.y2+=off; }
                                 else if (clone.type === 'rect') { clone.x+=off; clone.y+=off; }
                                 else if (clone.type === 'circle' || clone.type === 'polygon' || clone.type === 'arc') { clone.cx+=off; clone.cy+=off; }
-                                else if (clone.type === 'point' || clone.type === 'text' || clone.type === 'tag' || clone.type === 'image') { clone.x+=off; clone.y+=off; }
+                                else if (clone.type === 'point' || clone.type === 'text' || clone.type === 'tag' || clone.type === 'image' || clone.type === 'symbol') { clone.x+=off; clone.y+=off; }
                                 else if (clone.type === 'curve' || clone.type === 'fill') { clone.points.forEach(p => { p.x+=off; p.y+=off; }); }
                             });
 
@@ -360,7 +372,7 @@
                         }
                     }
                     
-                    if (this.state.isDrawing && ['line', 'measure', 'circle', 'polygon', 'arc', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                    if (this.state.isDrawing && ['line', 'measure', 'circle', 'polygon', 'arc', 'parallel', 'perpendicular', 'line_angle', 'text'].includes(this.state.tool)) {
                         if (/^[0-9\.]$/.test(e.key)) {
                             this.state.keyboardInput += e.key; this.forceGhostUpdate(); return;
                         }
@@ -692,6 +704,22 @@
                         if (sweep < -1.999 * Math.PI) sweep = -1.999 * Math.PI;
                         this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: this.state.arcStartAngle, sweepAngle: sweep, style: sty });
                     }
+                } else if (this.state.tool === 'text') {
+                    if (this.state.step === 1) {
+                        this.state.keyboardInput = "";
+                        // Permitir input directo numérico para el ancho del texto
+                        let x = Math.min(this.state.p1.x, this.state.p1.x + val);
+                        let y = this.state.p1.y;
+                        this.saveState();
+                        let newEnt = { type: 'text', id: Date.now(), x: x, y: y, w: val, text: "Doble clic para editar", bold: false, italic: false, underline: false, align: 'left', style: this.getStyle() };
+                        this.data.push(newEnt);
+                        this.state.selectedEntities = [newEnt];
+                        this.cancelAction();
+                        this.state.tool = 'cursor';
+                        document.querySelector('.tool-btn[data-tool="cursor"]').click();
+                        this.openEditModal(newEnt);
+                        return;
+                    }
                 }
 
                 this.state.keyboardInput = "";
@@ -737,19 +765,94 @@
                 this.snapIndicator.style.opacity = 0;
             },
 
+            // --- NOVEDAD: SISTEMA DE CÁLCULO DE INTERSECCIONES EXACTO MULTIFORMA ---
             updateIntersections() {
                 this.intersections = [];
-                let lines = this.data.filter(e => e.type === 'line' || e.type === 'measure');
-                for(let i=0; i<lines.length; i++) {
-                    for(let j=i+1; j<lines.length; j++) {
-                        let l1 = lines[i], l2 = lines[j];
+                let segs = [];
+                let arcs = [];
+                
+                // Extraer geometría para cálculos precisos
+                this.data.forEach(e => {
+                    if (e.type === 'line' || e.type === 'measure') segs.push({x1:e.x1, y1:e.y1, x2:e.x2, y2:e.y2});
+                    else if (e.type === 'rect') {
+                        segs.push({x1:e.x, y1:e.y, x2:e.x+e.w, y2:e.y});
+                        segs.push({x1:e.x+e.w, y1:e.y, x2:e.x+e.w, y2:e.y+e.h});
+                        segs.push({x1:e.x+e.w, y1:e.y+e.h, x2:e.x, y2:e.y+e.h});
+                        segs.push({x1:e.x, y1:e.y+e.h, x2:e.x, y2:e.y});
+                    }
+                    else if (e.type === 'polygon') {
+                        for(let i=0; i<e.sides; i++){
+                            let a1 = e.angle + (i*2*Math.PI/e.sides);
+                            let a2 = e.angle + ((i+1)*2*Math.PI/e.sides);
+                            segs.push({ x1: e.cx + e.r * Math.cos(a1), y1: e.cy + e.r * Math.sin(a1), x2: e.cx + e.r * Math.cos(a2), y2: e.cy + e.r * Math.sin(a2) });
+                        }
+                    }
+                    else if (e.type === 'circle') arcs.push({cx:e.cx, cy:e.cy, r:e.r, sA:0, sw: 2*Math.PI});
+                    else if (e.type === 'arc') {
+                        let sw = e.sweepAngle !== undefined ? e.sweepAngle : (e.endAngle - e.startAngle < 0 ? e.endAngle - e.startAngle + 2 * Math.PI : e.endAngle - e.startAngle);
+                        arcs.push({cx:e.cx, cy:e.cy, r:e.r, sA:e.startAngle, sw: sw});
+                    }
+                });
+
+                const pushPt = (x, y) => { if (!isNaN(x) && !isNaN(y)) this.intersections.push({x, y}); };
+                const inRange = (t) => t >= -0.0001 && t <= 1.0001;
+                const inArc = (x, y, arc) => {
+                    if (Math.abs(arc.sw) >= Math.PI * 1.99) return true;
+                    let a = Math.atan2(y - arc.cy, x - arc.cx);
+                    let s = arc.sA, e = arc.sA + arc.sw;
+                    if (arc.sw < 0) { s = e; e = arc.sA; }
+                    while (a < s - 0.0001) a += 2 * Math.PI;
+                    while (a >= s + 2 * Math.PI) a -= 2 * Math.PI;
+                    return a <= e + 0.0001;
+                };
+
+                // 1. Rectas con Rectas
+                for(let i=0; i<segs.length; i++) {
+                    for(let j=i+1; j<segs.length; j++) {
+                        let l1 = segs[i], l2 = segs[j];
                         let d = (l1.x1 - l1.x2)*(l2.y1 - l2.y2) - (l1.y1 - l1.y2)*(l2.x1 - l2.x2);
                         if (d === 0) continue;
                         let t = ((l1.x1 - l2.x1)*(l2.y1 - l2.y2) - (l1.y1 - l2.y1)*(l2.x1 - l2.x2)) / d;
                         let u = -((l1.x1 - l1.x2)*(l1.y1 - l2.y1) - (l1.y1 - l1.y2)*(l1.x1 - l2.x1)) / d;
-                        if (t >= -0.01 && t <= 1.01 && u >= -0.01 && u <= 1.01) {
-                            this.intersections.push({ x: l1.x1 + t*(l1.x2 - l1.x1), y: l1.y1 + t*(l1.y2 - l1.y1) });
-                        }
+                        if (inRange(t) && inRange(u)) pushPt(l1.x1 + t*(l1.x2 - l1.x1), l1.y1 + t*(l1.y2 - l1.y1));
+                    }
+                }
+
+                // 2. Rectas con Arcos/Círculos
+                for(let i=0; i<segs.length; i++) {
+                    let l = segs[i];
+                    let dx = l.x2 - l.x1, dy = l.y2 - l.y1;
+                    for(let j=0; j<arcs.length; j++) {
+                        let a = arcs[j];
+                        let A = dx*dx + dy*dy;
+                        let B = 2 * (dx*(l.x1 - a.cx) + dy*(l.y1 - a.cy));
+                        let C = (l.x1 - a.cx)*(l.x1 - a.cx) + (l.y1 - a.cy)*(l.y1 - a.cy) - a.r*a.r;
+                        let det = B*B - 4*A*C;
+                        if (A <= 0.0000001 || det < 0) continue;
+                        let t1 = (-B + Math.sqrt(det)) / (2*A);
+                        let t2 = (-B - Math.sqrt(det)) / (2*A);
+                        if (inRange(t1)) { let px = l.x1 + t1*dx, py = l.y1 + t1*dy; if (inArc(px, py, a)) pushPt(px, py); }
+                        if (det > 0 && inRange(t2)) { let px = l.x1 + t2*dx, py = l.y1 + t2*dy; if (inArc(px, py, a)) pushPt(px, py); }
+                    }
+                }
+
+                // 3. Arcos con Arcos
+                for(let i=0; i<arcs.length; i++) {
+                    for(let j=i+1; j<arcs.length; j++) {
+                        let a1 = arcs[i], a2 = arcs[j];
+                        let dx = a2.cx - a1.cx, dy = a2.cy - a1.cy;
+                        let d = Math.hypot(dx, dy);
+                        if (d > a1.r + a2.r || d < Math.abs(a1.r - a2.r) || d === 0) continue;
+                        let a = (a1.r*a1.r - a2.r*a2.r + d*d) / (2*d);
+                        let h = Math.sqrt(Math.max(0, a1.r*a1.r - a*a));
+                        let px = a1.cx + a * dx / d; let py = a1.cy + a * dy / d;
+                        let rx = -dy * (h / d); let ry = dx * (h / d);
+                        
+                        let p1x = px + rx, p1y = py + ry;
+                        let p2x = px - rx, p2y = py - ry;
+                        
+                        if (inArc(p1x, p1y, a1) && inArc(p1x, p1y, a2)) pushPt(p1x, p1y);
+                        if (h > 0.001 && inArc(p2x, p2y, a1) && inArc(p2x, p2y, a2)) pushPt(p2x, p2y);
                     }
                 }
             },
@@ -775,13 +878,12 @@
                             let next = (i + 1) % 4; let d = this.distPointToSegment({x,y}, pts[i], pts[next]);
                             if (d < minDist) { minDist = d; hit = ent; }
                         }
-                    } else if (ent.type === 'circle' || ent.type === 'polygon') {
-                        let d = Math.abs(Math.hypot(ent.cx - x, ent.cy - y) - ent.r);
+                    } else if (ent.type === 'circle' || ent.type === 'polygon' || ent.type === 'arc') {
+                        let r = ent.type === 'circle' ? ent.r : (ent.type === 'polygon' ? ent.r : ent.r);
+                        let cx = ent.cx, cy = ent.cy;
+                        let d = Math.abs(Math.hypot(cx - x, cy - y) - r);
                         if (d < minDist) { minDist = d; hit = ent; }
-                    } else if (ent.type === 'arc') {
-                        let d = Math.abs(Math.hypot(ent.cx - x, ent.cy - y) - ent.r);
-                        if (d < minDist) { minDist = d; hit = ent; }
-                    } else if (ent.type === 'point' || ent.type === 'text' || ent.type === 'tag') {
+                    } else if (ent.type === 'point' || ent.type === 'tag' || ent.type === 'symbol') {
                         if (Math.hypot(ent.x - x, ent.y - y) < 6) { hit = ent; minDist = 0; }
                     } else if (ent.type === 'curve') {
                         ent.points.forEach(p => { if (Math.hypot(p.x - x, p.y - y) < 8) { hit = ent; minDist = 0; }});
@@ -792,6 +894,14 @@
                         }
                     } else if (ent.type === 'image') {
                         if (x >= ent.x && x <= ent.x + ent.width && y >= ent.y && y <= ent.y + ent.height) {
+                            hit = ent; minDist = 0;
+                        }
+                    } else if (ent.type === 'text') {
+                        // Novedad: Hit detection para cajas de texto
+                        let w = ent.w || 100;
+                        let lineCount = ent.text ? ent.text.split('\n').length : 1;
+                        let h = (lineCount + 2) * (ent.fontSize || 10);
+                        if (x >= ent.x && x <= ent.x + w && y >= ent.y && y <= ent.y + h) {
                             hit = ent; minDist = 0;
                         }
                     }
@@ -906,15 +1016,26 @@
                 
                 let s = ent.style || { width: 0.5, color: '#000000', dash: 'none', marker: 'none', fillColor: '#ffffff' };
                 
-                if (ent.type === 'text' || ent.type === 'tag') {
-                    fields.innerHTML += `<label>Texto: <input type="text" id="edit-text" value="${ent.text}" style="width:160px;"></label>`;
+                if (ent.type === 'text') {
+                    // Novedad: Configuración Textos Completos
+                    fields.innerHTML += `<label>Texto: <textarea id="edit-text" style="width:160px; background:#1e1e1e; color:white; height:60px;">${ent.text}</textarea></label>`;
+                    fields.innerHTML += `<label>Ancho Caja (mm): <input type="number" id="edit-boxw" value="${ent.w || 100}" style="width:60px;"></label>`;
                     fields.innerHTML += `<label>Tamaño (mm): <input type="number" step="0.5" id="edit-size" value="${ent.fontSize || Math.max(4, s.width*4)}" style="width:60px;"></label>`;
-                    fields.innerHTML += `<label>Fuente: <select id="edit-font"><option value="sans-serif" ${ent.fontFamily==='sans-serif'?'selected':''}>Sans-Serif</option><option value="serif" ${ent.fontFamily==='serif'?'selected':''}>Serif</option><option value="monospace" ${ent.fontFamily==='monospace'?'selected':''}>Monospace</option></select></label>`;
+                    fields.innerHTML += `<label>Alineación: <select id="edit-align"><option value="left" ${ent.align==='left'?'selected':''}>Izquierda</option><option value="center" ${ent.align==='center'?'selected':''}>Centro</option><option value="right" ${ent.align==='right'?'selected':''}>Derecha</option><option value="justify" ${ent.align==='justify'?'selected':''}>Justificado</option></select></label>`;
+                    fields.innerHTML += `<div style="display:flex; justify-content:space-between; margin-top:5px;">
+                        <label><input type="checkbox" id="edit-bold" ${ent.bold?'checked':''}> Negrita</label>
+                        <label><input type="checkbox" id="edit-italic" ${ent.italic?'checked':''}> Cursiva</label>
+                        <label><input type="checkbox" id="edit-underline" ${ent.underline?'checked':''}> Sub.</label>
+                    </div>`;
+                    fields.innerHTML += `<label style="margin-top:10px;">Color: <input type="color" id="edit-color" value="${s.color}"></label>`;
+                } else if (ent.type === 'tag') {
+                    fields.innerHTML += `<label>Etiqueta: <input type="text" id="edit-text" value="${ent.text}" style="width:160px;"></label>`;
+                    fields.innerHTML += `<label>Tamaño (mm): <input type="number" step="0.5" id="edit-size" value="${ent.fontSize || Math.max(4, s.width*4)}" style="width:60px;"></label>`;
                     fields.innerHTML += `<label>Color: <input type="color" id="edit-color" value="${s.color}"></label>`;
                 } else if (ent.type === 'image') {
                     fields.innerHTML += `<label>Ancho (mm): <input type="number" step="1" id="edit-width" value="${ent.width.toFixed(1)}" style="width:60px;"></label>`;
                     fields.innerHTML += `<p style="font-size:11px; color:#aaa; margin-top:5px;">El alto se ajustará automáticamente.</p>`;
-                } else {
+                } else if (ent.type !== 'symbol') {
                     fields.innerHTML += `<label>Color Línea: <input type="color" id="edit-color" value="${s.color}"></label>`;
                     fields.innerHTML += `<label>Grosor (mm): <input type="number" step="0.1" id="edit-width" value="${s.width}" style="width:60px;"></label>`;
                     fields.innerHTML += `<label>Trazo: <select id="edit-dash"><option value="none" ${s.dash==='none'?'selected':''}>Continuo</option><option value="3,3" ${s.dash==='3,3'?'selected':''}>Discontinuo</option><option value="10,2,2,2" ${s.dash==='10,2,2,2'?'selected':''}>Raya-Punto</option></select></label>`;
@@ -937,10 +1058,18 @@
                 
                 if (!ent.style) ent.style = { width: 0.5, color: '#000000', dash: 'none', marker: 'none', fillColor: '#ffffff' };
                 
-                if (ent.type === 'text' || ent.type === 'tag') {
+                if (ent.type === 'text') {
+                    ent.text = document.getElementById('edit-text').value;
+                    ent.w = parseFloat(document.getElementById('edit-boxw').value) || 100;
+                    ent.fontSize = parseFloat(document.getElementById('edit-size').value);
+                    ent.align = document.getElementById('edit-align').value;
+                    ent.bold = document.getElementById('edit-bold').checked;
+                    ent.italic = document.getElementById('edit-italic').checked;
+                    ent.underline = document.getElementById('edit-underline').checked;
+                    ent.style.color = document.getElementById('edit-color').value;
+                } else if (ent.type === 'tag') {
                     ent.text = document.getElementById('edit-text').value;
                     ent.fontSize = parseFloat(document.getElementById('edit-size').value);
-                    ent.fontFamily = document.getElementById('edit-font').value;
                     ent.style.color = document.getElementById('edit-color').value;
                 } else if (ent.type === 'image') {
                     let newW = parseFloat(document.getElementById('edit-width').value);
@@ -948,7 +1077,7 @@
                         let ratio = ent.height / ent.width;
                         ent.width = newW; ent.height = newW * ratio;
                     }
-                } else {
+                } else if (ent.type !== 'symbol') {
                     ent.style.color = document.getElementById('edit-color').value;
                     ent.style.width = parseFloat(document.getElementById('edit-width').value);
                     ent.style.dash = document.getElementById('edit-dash').value;
@@ -1009,9 +1138,20 @@
                     return;
                 }
 
+                // Novedad: Caja de Texto Inicial
                 if (this.state.tool === 'text') {
-                    let t = prompt("Introduce el texto:");
-                    if (t) { this.saveState(); this.data.push({ type: 'text', id: Date.now(), x: pos.x, y: pos.y, text: t, style: this.getStyle() }); this.renderAll(); }
+                    this.state.p1 = pos; 
+                    this.state.step = 1; 
+                    this.state.isDrawing = true;
+                    return;
+                }
+
+                // Novedad: Colocación de Símbolos
+                if (this.state.tool === 'symbol') {
+                    this.saveState();
+                    let symType = document.getElementById('prop-symbol-type').value;
+                    this.data.push({ type: 'symbol', symbolType: symType, id: Date.now(), x: pos.x, y: pos.y, style: this.getStyle() });
+                    this.renderAll();
                     return;
                 }
                 
@@ -1215,6 +1355,15 @@
 
                 if (!this.state.isDrawing) return;
 
+                if (this.state.tool === 'text' && this.state.step === 1) {
+                    let x = Math.min(this.state.p1.x, pos.x);
+                    let y = Math.min(this.state.p1.y, pos.y);
+                    let w = Math.abs(pos.x - this.state.p1.x);
+                    let h = Math.abs(pos.y - this.state.p1.y);
+                    this.layerGhost.innerHTML = `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(0,122,204,0.1)" stroke="#007acc" stroke-dasharray="2,2"/>`;
+                    return;
+                }
+
                 if (this.state.tool === 'cursor') {
                     if (this.state.isBoxSelecting) {
                         let minX = Math.min(this.state.p1.x, pos.x), maxX = Math.max(this.state.p1.x, pos.x);
@@ -1257,7 +1406,7 @@
                                 else if(e.type === 'rect') { e.x+=dx; e.y+=dy; }
                                 else if(e.type === 'circle' || e.type === 'polygon') { e.cx+=dx; e.cy+=dy; }
                                 else if(e.type === 'arc') { e.cx+=dx; e.cy+=dy; }
-                                else if(e.type === 'point' || e.type === 'text' || e.type === 'tag') { e.x+=dx; e.y+=dy; }
+                                else if(e.type === 'point' || e.type === 'text' || e.type === 'tag' || e.type === 'symbol') { e.x+=dx; e.y+=dy; }
                                 else if(e.type === 'curve' || e.type === 'fill') { e.points.forEach(p => { p.x+=dx; p.y+=dy; }); }
                                 else if(e.type === 'image') { e.x+=dx; e.y+=dy; } 
                             });
@@ -1422,6 +1571,29 @@
                     return; 
                 }
 
+                if (this.state.tool === 'text') {
+                    if (this.state.step === 1) {
+                        let pos = this.getMousePos(evt);
+                        let x = Math.min(this.state.p1.x, pos.x);
+                        let y = Math.min(this.state.p1.y, pos.y);
+                        let w = Math.abs(pos.x - this.state.p1.x);
+                        if (w < 20) w = 100; // Ancho por defecto si no se arrastra
+                        
+                        this.saveState();
+                        let newEnt = { type: 'text', id: Date.now(), x: x, y: y, w: w, text: "Doble clic para editar", bold: false, italic: false, underline: false, align: 'left', style: this.getStyle() };
+                        this.data.push(newEnt);
+                        
+                        this.layerGhost.innerHTML = '';
+                        this.state.selectedEntities = [newEnt];
+                        this.cancelAction(); 
+                        
+                        this.state.tool = 'cursor';
+                        document.querySelector('.tool-btn[data-tool="cursor"]').click();
+                        this.openEditModal(newEnt);
+                    }
+                    return;
+                }
+
                 if (this.state.tool === 'eraser') {
                     let pos = this.getMousePos(evt);
                     let minX = Math.min(this.state.p1.x, pos.x), maxX = Math.max(this.state.p1.x, pos.x);
@@ -1458,6 +1630,15 @@
                         if (isSelected || isHover) {
                             this.layerSolucion.innerHTML += `<rect x="${ent.x}" y="${ent.y}" width="${ent.width}" height="${ent.height}" fill="none" stroke="#007acc" stroke-width="1" stroke-dasharray="4,4"/>`;
                         }
+                    } else if (ent.type === 'symbol') {
+                        let cx = ent.x, cy = ent.y;
+                        if (ent.symbolType === 'perp') {
+                            this.layerSolucion.innerHTML += `<rect x="${cx-2.5}" y="${cy-2.5}" width="5" height="5" fill="none" stroke="${color}" stroke-width="${sw}"/><circle cx="${cx}" cy="${cy}" r="${sw}" fill="${color}"/>`;
+                        } else if (ent.symbolType === 'para') {
+                            this.layerSolucion.innerHTML += `<line x1="${cx-1}" y1="${cy+3}" x2="${cx+1.5}" y2="${cy-3}" stroke="${color}" stroke-width="${sw}"/><line x1="${cx+2}" y1="${cy+3}" x2="${cx+4.5}" y2="${cy-3}" stroke="${color}" stroke-width="${sw}"/>`;
+                        } else if (ent.symbolType === 'coin') {
+                            this.layerSolucion.innerHTML += `<line x1="${cx-2.5}" y1="${cy-1.5}" x2="${cx+2.5}" y2="${cy-1.5}" stroke="${color}" stroke-width="${sw}"/><line x1="${cx-2.5}" y1="${cy}" x2="${cx+2.5}" y2="${cy}" stroke="${color}" stroke-width="${sw}"/><line x1="${cx-2.5}" y1="${cy+1.5}" x2="${cx+2.5}" y2="${cy+1.5}" stroke="${color}" stroke-width="${sw}"/>`;
+                        }
                     } else if (ent.type === 'line') {
                         this.layerSolucion.innerHTML += `<line x1="${ent.x1}" y1="${ent.y1}" x2="${ent.x2}" y2="${ent.y2}" stroke="${color}" stroke-width="${sw}" ${dash} ${markStyle}/>`;
                     } else if (ent.type === 'measure') {
@@ -1488,7 +1669,60 @@
                     } else if (ent.type === 'point') {
                         this.layerSolucion.innerHTML += `<line x1="${ent.x-3}" y1="${ent.y}" x2="${ent.x+3}" y2="${ent.y}" stroke="${color}" stroke-width="${sw}"/><line x1="${ent.x}" y1="${ent.y-3}" x2="${ent.x}" y2="${ent.y+3}" stroke="${color}" stroke-width="${sw}"/>`;
                     } else if (ent.type === 'text') {
-                        this.layerSolucion.innerHTML += `<text x="${ent.x}" y="${ent.y}" fill="${color}" font-size="${ent.fontSize || Math.max(4, sw*4)}" font-family="${ent.fontFamily || 'sans-serif'}">${ent.text}</text>`;
+                        let fw = ent.bold ? 'bold' : 'normal';
+                        let fs = ent.italic ? 'italic' : 'normal';
+                        let td = ent.underline ? 'underline' : 'none';
+                        let align = ent.align || 'left';
+                        let fontSize = ent.fontSize || Math.max(4, sw*4);
+                        let fontFamily = ent.fontFamily || 'sans-serif';
+                        
+                        let ctx = document.createElement('canvas').getContext('2d');
+                        ctx.font = `${fw} ${fs} ${fontSize}px ${fontFamily}`;
+                        
+                        let lines = [];
+                        let rawLines = ent.text ? ent.text.split('\n') : [];
+                        
+                        rawLines.forEach(rl => {
+                            let words = rl.split(' ');
+                            let currentLine = words[0] || '';
+                            for (let i = 1; i < words.length; i++) {
+                                let word = words[i];
+                                let width = ctx.measureText(currentLine + " " + word).width;
+                                if (ent.w && width > ent.w && ent.w > 10) {
+                                    lines.push(currentLine);
+                                    currentLine = word;
+                                } else {
+                                    currentLine += " " + word;
+                                }
+                            }
+                            lines.push(currentLine);
+                        });
+
+                        let textSvg = '';
+                        lines.forEach((line, idx) => {
+                            let lineY = ent.y + (idx + 1) * (fontSize * 1.15); 
+                            let lineX = ent.x;
+                            let tspanAttr = '';
+
+                            if (align === 'center' && ent.w) {
+                                lineX = ent.x + ent.w / 2;
+                                tspanAttr = `text-anchor="middle"`;
+                            } else if (align === 'right' && ent.w) {
+                                lineX = ent.x + ent.w;
+                                tspanAttr = `text-anchor="end"`;
+                            } else if (align === 'justify' && ent.w && idx !== lines.length - 1 && line.trim().length > 0) {
+                                tspanAttr = `textLength="${ent.w}" lengthAdjust="spacing"`;
+                            }
+
+                            textSvg += `<tspan x="${lineX}" y="${lineY}" ${tspanAttr}>${line}</tspan>`;
+                        });
+
+                        this.layerSolucion.innerHTML += `<text fill="${color}" font-size="${fontSize}" font-family="${fontFamily}" font-weight="${fw}" font-style="${fs}" text-decoration="${td}">${textSvg}</text>`;
+                        
+                        if (isSelected && this.state.tool === 'cursor' && ent.w) {
+                            let h = (lines.length * (fontSize * 1.15)) + fontSize * 0.5;
+                            this.layerSolucion.innerHTML += `<rect x="${ent.x}" y="${ent.y}" width="${ent.w}" height="${h}" fill="none" stroke="#007acc" stroke-width="0.5" stroke-dasharray="2,2"/>`;
+                        }
                     } else if (ent.type === 'tag') {
                         this.layerSolucion.innerHTML += `<text x="${ent.x}" y="${ent.y}" fill="${color}" font-size="${ent.fontSize || Math.max(4, sw*4)}" font-family="${ent.fontFamily || 'sans-serif'}" transform="rotate(${ent.angle}, ${ent.x}, ${ent.y})">${ent.text}</text>`;
                     } else if (ent.type === 'fill') {
@@ -1511,8 +1745,6 @@
             
             async saveToStorage() { 
                 this.syncCurrentPage();
-                
-                // NOVEDAD: DEBOUNCE (Autoguardado diferido para evitar colapsos al dibujar en muchas páginas)
                 if (this.saveTimer) clearTimeout(this.saveTimer);
                 this.saveTimer = setTimeout(async () => {
                     try {
@@ -1522,7 +1754,7 @@
                     } catch(e) {
                         console.error("Error IndexedDB:", e);
                     }
-                }, 600); // Espera 600ms sin hacer nada antes de guardar la base de datos pesada
+                }, 600); 
             },
             async loadFromStorage() { 
                 try {
@@ -1672,6 +1904,7 @@
                         tools.forEach(t => t.classList.remove('active')); btn.classList.add('active');
                         this.cancelAction(); this.state.tool = btn.dataset.tool;
                         document.getElementById('poly-prop').style.display = this.state.tool === 'polygon' ? 'inline-block' : 'none';
+                        document.getElementById('symbol-prop').style.display = this.state.tool === 'symbol' ? 'inline-block' : 'none';
                     });
                 });
             }
