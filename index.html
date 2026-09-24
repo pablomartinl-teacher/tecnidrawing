@@ -231,6 +231,7 @@
                 currentSnap: null,
                 referenceLine: null,
                 selectedEntities: [],
+                hoverEntity: null,     
                 dragPointIndex: -1,    
                 customAngle: 0,
                 keyboardInput: "",
@@ -308,8 +309,10 @@
                     }
                     
                     if (!e.ctrlKey && !e.shiftKey && !e.altKey && /^[a-z]$/i.test(e.key)) {
-                        const btn = document.querySelector(`.tool-btn[data-key="${e.key.toLowerCase()}"]`);
-                        if (btn) { btn.click(); return; }
+                        if (e.key.toLowerCase() !== 'd' && e.key.toLowerCase() !== 'c' && e.key.toLowerCase() !== 'v') {
+                            const btn = document.querySelector(`.tool-btn[data-key="${e.key.toLowerCase()}"]`);
+                            if (btn) { btn.click(); return; }
+                        }
                     }
 
                     if ((e.key === 'Alt' || e.key.toLowerCase() === 'd') && !e.repeat && !e.ctrlKey) {
@@ -758,6 +761,15 @@
                 this.snapIndicator.style.opacity = 0;
             },
 
+            distPointToSegment(M, A, B) {
+                let l2 = (B.x - A.x) ** 2 + (B.y - A.y) ** 2;
+                if (l2 === 0) return Math.hypot(M.x - A.x, M.y - A.y);
+                let t = ((M.x - A.x) * (B.x - A.x) + (M.y - A.y) * (B.y - A.y)) / l2;
+                t = Math.max(0, Math.min(1, t)); 
+                let projX = A.x + t * (B.x - A.x); let projY = A.y + t * (B.y - A.y);
+                return Math.hypot(M.x - projX, M.y - projY);
+            },
+
             updateIntersections() {
                 this.intersections = [];
                 let segs = [];
@@ -845,52 +857,84 @@
                 }
             },
 
-            distPointToSegment(M, A, B) {
-                let l2 = (B.x - A.x) ** 2 + (B.y - A.y) ** 2;
-                if (l2 === 0) return Math.hypot(M.x - A.x, M.y - A.y);
-                let t = ((M.x - A.x) * (B.x - A.x) + (M.y - A.y) * (B.y - A.y)) / l2;
-                t = Math.max(0, Math.min(1, t)); 
-                let projX = A.x + t * (B.x - A.x); let projY = A.y + t * (B.y - A.y);
-                return Math.hypot(M.x - projX, M.y - projY);
-            },
-
+            // --- NOVEDAD: SISTEMA DE SELECCIÓN AFINADO (Hit Detection Refactor) ---
             getHitEntity(x, y) {
-                let hit = null, minDist = 4; 
+                let hit = null, minDist = 6; 
                 this.data.forEach(ent => {
+                    let d = Infinity;
+                    
                     if (ent.type === 'line' || ent.type === 'measure') {
-                        let d = this.distPointToSegment({x, y}, {x: ent.x1, y: ent.y1}, {x: ent.x2, y: ent.y2});
-                        if (d < minDist) { minDist = d; hit = ent; }
+                        d = this.distPointToSegment({x, y}, {x: ent.x1, y: ent.y1}, {x: ent.x2, y: ent.y2});
                     } else if (ent.type === 'rect') {
                         let pts = [{x: ent.x, y: ent.y}, {x: ent.x + ent.w, y: ent.y}, {x: ent.x + ent.w, y: ent.y + ent.h}, {x: ent.x, y: ent.y + ent.h}];
                         for (let i = 0; i < 4; i++) {
-                            let next = (i + 1) % 4; let d = this.distPointToSegment({x,y}, pts[i], pts[next]);
-                            if (d < minDist) { minDist = d; hit = ent; }
+                            let ds = this.distPointToSegment({x,y}, pts[i], pts[(i + 1) % 4]);
+                            if (ds < d) d = ds;
                         }
-                    } else if (ent.type === 'circle' || ent.type === 'polygon' || ent.type === 'arc') {
-                        let r = ent.type === 'circle' ? ent.r : (ent.type === 'polygon' ? ent.r : ent.r);
-                        let cx = ent.cx, cy = ent.cy;
-                        let d = Math.abs(Math.hypot(cx - x, cy - y) - r);
-                        if (d < minDist) { minDist = d; hit = ent; }
+                    } else if (ent.type === 'circle') {
+                        d = Math.abs(Math.hypot(ent.cx - x, ent.cy - y) - ent.r);
+                    } else if (ent.type === 'polygon') {
+                        let pts = [];
+                        for(let i=0; i<ent.sides; i++) {
+                            let a = ent.angle + (i * 2 * Math.PI / ent.sides);
+                            pts.push({x: ent.cx + ent.r * Math.cos(a), y: ent.cy + ent.r * Math.sin(a)});
+                        }
+                        for (let i = 0; i < ent.sides; i++) {
+                            let ds = this.distPointToSegment({x,y}, pts[i], pts[(i + 1) % ent.sides]);
+                            if (ds < d) d = ds;
+                        }
+                    } else if (ent.type === 'arc') {
+                        let distCenter = Math.hypot(ent.cx - x, ent.cy - y);
+                        let dRad = Math.abs(distCenter - ent.r);
+                        if (dRad <= minDist) {
+                            let aMouse = Math.atan2(y - ent.cy, x - ent.cx);
+                            let sweep = ent.sweepAngle !== undefined ? ent.sweepAngle : (ent.endAngle - ent.startAngle < 0 ? ent.endAngle - ent.startAngle + 2 * Math.PI : ent.endAngle - ent.startAngle);
+                            let sA = ent.startAngle;
+                            let eA = sA + sweep;
+                            if (sweep < 0) { sA = eA; eA = ent.startAngle; }
+                            
+                            while (aMouse < sA - 0.1) aMouse += 2 * Math.PI;
+                            while (aMouse >= sA + 2 * Math.PI - 0.1) aMouse -= 2 * Math.PI;
+                            
+                            if (aMouse <= eA + 0.1 || Math.abs(sweep) >= Math.PI * 1.99) {
+                                d = dRad;
+                            }
+                        }
                     } else if (ent.type === 'point' || ent.type === 'tag' || ent.type === 'symbol') {
-                        if (Math.hypot(ent.x - x, ent.y - y) < 6) { hit = ent; minDist = 0; }
+                        d = Math.hypot(ent.x - x, ent.y - y);
+                        if (d < minDist + 2) d = Math.max(0, d - 2); 
                     } else if (ent.type === 'curve') {
-                        ent.points.forEach(p => { if (Math.hypot(p.x - x, p.y - y) < 8) { hit = ent; minDist = 0; }});
+                        for (let i = 0; i < ent.points.length - 1; i++) {
+                            let ds = this.distPointToSegment({x,y}, ent.points[i], ent.points[i+1]);
+                            if (ds < d) d = ds;
+                        }
+                        ent.points.forEach(p => {
+                            let dp = Math.hypot(p.x - x, p.y - y);
+                            if (dp < d) d = dp;
+                        });
                     } else if (ent.type === 'fill') {
                         for (let i = 0; i < ent.points.length; i++) {
-                            let next = (i + 1) % ent.points.length; let d = this.distPointToSegment({x,y}, ent.points[i], ent.points[next]);
-                            if (d < minDist) { minDist = d; hit = ent; }
+                            let ds = this.distPointToSegment({x,y}, ent.points[i], ent.points[(i + 1) % ent.points.length]);
+                            if (ds < d) d = ds;
                         }
                     } else if (ent.type === 'image') {
                         if (x >= ent.x && x <= ent.x + ent.width && y >= ent.y && y <= ent.y + ent.height) {
-                            hit = ent; minDist = 0;
+                            d = 0;
                         }
                     } else if (ent.type === 'text') {
                         let w = ent.w || 100;
                         let lineCount = ent.text ? ent.text.split('\n').length : 1;
-                        let h = (lineCount + 2) * (ent.fontSize || 10);
+                        let sw = parseFloat(ent.style && ent.style.width ? ent.style.width : 0.5);
+                        let fontSize = ent.fontSize || Math.max(4, sw*4);
+                        let h = (lineCount * (fontSize * 1.15)) + fontSize * 0.5;
                         if (x >= ent.x && x <= ent.x + w && y >= ent.y && y <= ent.y + h) {
-                            hit = ent; minDist = 0;
+                            d = 0;
                         }
+                    }
+
+                    if (d <= minDist) {
+                        minDist = d;
+                        hit = ent;
                     }
                 });
                 return hit;
@@ -1005,7 +1049,7 @@
                 
                 let s = ent.style || { width: 0.5, color: '#000000', dash: 'none', marker: 'none', fillColor: '#ffffff' };
                 
-                if (ent.type === 'text') {
+                if (ent.type === 'text' || ent.type === 'tag') {
                     fields.innerHTML += `<label>Texto: <textarea id="edit-text" style="width:160px; background:#1e1e1e; color:white; height:60px;">${ent.text}</textarea></label>`;
                     fields.innerHTML += `<label>Ancho Caja (mm): <input type="number" id="edit-boxw" value="${ent.w || 100}" style="width:60px;"></label>`;
                     fields.innerHTML += `<label>Tamaño (mm): <input type="number" step="0.5" id="edit-size" value="${ent.fontSize || Math.max(4, s.width*4)}" style="width:60px;"></label>`;
@@ -1016,14 +1060,10 @@
                         <label><input type="checkbox" id="edit-underline" ${ent.underline?'checked':''}> Sub.</label>
                     </div>`;
                     fields.innerHTML += `<label style="margin-top:10px;">Color: <input type="color" id="edit-color" value="${s.color}"></label>`;
-                } else if (ent.type === 'tag') {
-                    fields.innerHTML += `<label>Etiqueta: <input type="text" id="edit-text" value="${ent.text}" style="width:160px;"></label>`;
-                    fields.innerHTML += `<label>Tamaño (mm): <input type="number" step="0.5" id="edit-size" value="${ent.fontSize || Math.max(4, s.width*4)}" style="width:60px;"></label>`;
-                    fields.innerHTML += `<label>Color: <input type="color" id="edit-color" value="${s.color}"></label>`;
                 } else if (ent.type === 'image') {
                     fields.innerHTML += `<label>Ancho (mm): <input type="number" step="1" id="edit-width" value="${ent.width.toFixed(1)}" style="width:60px;"></label>`;
                     fields.innerHTML += `<p style="font-size:11px; color:#aaa; margin-top:5px;">El alto se ajustará automáticamente.</p>`;
-                } else if (ent.type !== 'symbol') {
+                } else {
                     fields.innerHTML += `<label>Color Línea: <input type="color" id="edit-color" value="${s.color}"></label>`;
                     fields.innerHTML += `<label>Grosor (mm): <input type="number" step="0.1" id="edit-width" value="${s.width}" style="width:60px;"></label>`;
                     fields.innerHTML += `<label>Trazo: <select id="edit-dash"><option value="none" ${s.dash==='none'?'selected':''}>Continuo</option><option value="3,3" ${s.dash==='3,3'?'selected':''}>Discontinuo</option><option value="10,2,2,2" ${s.dash==='10,2,2,2'?'selected':''}>Raya-Punto</option></select></label>`;
@@ -1046,7 +1086,7 @@
                 
                 if (!ent.style) ent.style = { width: 0.5, color: '#000000', dash: 'none', marker: 'none', fillColor: '#ffffff' };
                 
-                if (ent.type === 'text') {
+                if (ent.type === 'text' || ent.type === 'tag') {
                     ent.text = document.getElementById('edit-text').value;
                     ent.w = parseFloat(document.getElementById('edit-boxw').value) || 100;
                     ent.fontSize = parseFloat(document.getElementById('edit-size').value);
@@ -1055,17 +1095,13 @@
                     ent.italic = document.getElementById('edit-italic').checked;
                     ent.underline = document.getElementById('edit-underline').checked;
                     ent.style.color = document.getElementById('edit-color').value;
-                } else if (ent.type === 'tag') {
-                    ent.text = document.getElementById('edit-text').value;
-                    ent.fontSize = parseFloat(document.getElementById('edit-size').value);
-                    ent.style.color = document.getElementById('edit-color').value;
                 } else if (ent.type === 'image') {
                     let newW = parseFloat(document.getElementById('edit-width').value);
                     if (!isNaN(newW) && newW > 0) {
                         let ratio = ent.height / ent.width;
                         ent.width = newW; ent.height = newW * ratio;
                     }
-                } else if (ent.type !== 'symbol') {
+                } else {
                     ent.style.color = document.getElementById('edit-color').value;
                     ent.style.width = parseFloat(document.getElementById('edit-width').value);
                     ent.style.dash = document.getElementById('edit-dash').value;
@@ -1534,9 +1570,9 @@
                         let minY = Math.min(this.state.p1.y, pos.y), maxY = Math.max(this.state.p1.y, pos.y);
                         
                         let newlySelected = this.data.filter(e => {
-                            let x = e.x || e.cx || e.x1 || (e.points && e.points[0].x); 
-                            let y = e.y || e.cy || e.y1 || (e.points && e.points[0].y);
-                            return (x >= minX && x <= maxX && y >= minY && y <= maxY);
+                            let ex = e.x !== undefined ? e.x : (e.cx !== undefined ? e.cx : (e.x1 !== undefined ? e.x1 : (e.points ? e.points[0].x : 0))); 
+                            let ey = e.y !== undefined ? e.y : (e.cy !== undefined ? e.cy : (e.y1 !== undefined ? e.y1 : (e.points ? e.points[0].y : 0)));
+                            return (ex >= minX && ex <= maxX && ey >= minY && ey <= maxY);
                         });
 
                         if (evt.ctrlKey) {
@@ -1586,8 +1622,9 @@
                     let minY = Math.min(this.state.p1.y, pos.y), maxY = Math.max(this.state.p1.y, pos.y);
                     this.saveState();
                     this.data = this.data.filter(e => {
-                        let x = e.x || e.cx || e.x1 || (e.points && e.points[0].x); let y = e.y || e.cy || e.y1 || (e.points && e.points[0].y);
-                        return !(x >= minX && x <= maxX && y >= minY && y <= maxY);
+                        let ex = e.x !== undefined ? e.x : (e.cx !== undefined ? e.cx : (e.x1 !== undefined ? e.x1 : (e.points ? e.points[0].x : 0))); 
+                        let ey = e.y !== undefined ? e.y : (e.cy !== undefined ? e.cy : (e.y1 !== undefined ? e.y1 : (e.points ? e.points[0].y : 0)));
+                        return !(ex >= minX && ex <= maxX && ey >= minY && ey <= maxY);
                     });
                     this.layerGhost.innerHTML = ''; this.renderAll();
                 }
@@ -1658,7 +1695,8 @@
                         let fs = ent.italic ? 'italic' : 'normal';
                         let td = ent.underline ? 'underline' : 'none';
                         let align = ent.align || 'left';
-                        let fontSize = ent.fontSize || Math.max(4, sw*4);
+                        let str_sw = ent.style && ent.style.width ? parseFloat(ent.style.width) : 0.5;
+                        let fontSize = ent.fontSize || Math.max(4, str_sw*4);
                         let fontFamily = ent.fontFamily || 'sans-serif';
                         
                         let ctx = document.createElement('canvas').getContext('2d');
@@ -1709,7 +1747,8 @@
                             this.layerSolucion.innerHTML += `<rect x="${ent.x}" y="${ent.y}" width="${ent.w}" height="${h}" fill="none" stroke="#007acc" stroke-width="0.5" stroke-dasharray="2,2"/>`;
                         }
                     } else if (ent.type === 'tag') {
-                        this.layerSolucion.innerHTML += `<text x="${ent.x}" y="${ent.y}" fill="${color}" font-size="${ent.fontSize || Math.max(4, sw*4)}" font-family="${ent.fontFamily || 'sans-serif'}" transform="rotate(${ent.angle}, ${ent.x}, ${ent.y})">${ent.text}</text>`;
+                        let str_sw = ent.style && ent.style.width ? parseFloat(ent.style.width) : 0.5;
+                        this.layerSolucion.innerHTML += `<text x="${ent.x}" y="${ent.y}" fill="${color}" font-size="${ent.fontSize || Math.max(4, str_sw*4)}" font-family="${ent.fontFamily || 'sans-serif'}" transform="rotate(${ent.angle}, ${ent.x}, ${ent.y})">${ent.text}</text>`;
                     } else if (ent.type === 'fill') {
                         let pts = ent.points.map(p=>`${p.x},${p.y}`).join(' ');
                         let defs = `<defs><pattern id="pat-${ent.id}" width="6" height="6" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="${s.fillColor}" /><line x1="0" y1="0" x2="0" y2="6" stroke="${color}" stroke-width="${sw}" /></pattern></defs>`;
