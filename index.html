@@ -1706,3 +1706,380 @@
                         }
 
                         let degrees = Math.abs(this.state.arcSweepAngle * 180 / Math.PI);
+                        let kDegStr = kInput !== "" ? kInput + "_" : degrees.toFixed(1);
+
+                        let pathData = this.getSvgArcPath(this.state.p1.x, this.state.p1.y, r, this.state.arcStartAngle, this.state.arcSweepAngle);
+                        
+                        ghostContent = `<circle cx="${this.state.p1.x}" cy="${this.state.p1.y}" r="${r}" stroke="#aaa" stroke-dasharray="2,4" fill="none" stroke-width="0.5"/><path d="${pathData}" stroke="${s.color}" fill="none" stroke-width="${s.width}"/><line x1="${this.state.p1.x}" y1="${this.state.p1.y}" x2="${pos.x}" y2="${pos.y}" stroke="${s.color}" stroke-dasharray="1,2" stroke-width="0.3" opacity="0.5"/>`;
+                        overlayText = `<text x="${pos.x}" y="${pos.y - 3}" fill="#007acc" font-size="4" font-family="monospace">${kDegStr}º</text>`;
+                    }
+                } else if (this.state.tool === 'curve') {
+                    let ptsStr = this.state.p1.map(p=>`${p.x},${p.y}`).join(' ');
+                    ghostContent = `<polyline points="${ptsStr} ${pos.x},${pos.y}" fill="none" stroke="${s.color}" stroke-dasharray="2,2" stroke-width="0.5"/>`;
+                } else if (this.state.tool === 'fill') {
+                    let pts = this.state.p1.map(p=>`${p.x},${p.y}`).join(' ');
+                    ghostContent = `<polyline points="${pts} ${pos.x},${pos.y}" fill="none" stroke="${s.color}" stroke-dasharray="2,2"/>`;
+                }
+                
+                this.layerGhost.innerHTML = ghostContent + overlayText;
+
+                if (this.state.activeAlignX !== null) {
+                    this.layerGhost.innerHTML += `<line x1="${this.state.activeAlignX}" y1="-5000" x2="${this.state.activeAlignX}" y2="5000" stroke="#007acc" stroke-width="0.2" stroke-dasharray="4,4" opacity="0.7"/>`;
+                }
+                if (this.state.activeAlignY !== null) {
+                    this.layerGhost.innerHTML += `<line x1="-5000" y1="${this.state.activeAlignY}" x2="5000" y2="${this.state.activeAlignY}" stroke="#007acc" stroke-width="0.2" stroke-dasharray="4,4" opacity="0.7"/>`;
+                }
+            },
+
+            onPointerUp(evt) {
+                if (this.state.isPanning) {
+                    this.state.panStart = null;
+                    this.svg.style.cursor = 'grab';
+                    return;
+                }
+
+                if (evt.touches && evt.touches.length < 2) { this.state.initialPinchDistance = null; }
+                
+                if (!this.state.isDrawing) return;
+                
+                if (['arc', 'curve', 'fill', 'line', 'measure', 'circle', 'polygon', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) return; 
+                
+                this.state.isDrawing = false;
+                
+                if (this.state.tool === 'cursor') { 
+                    this.state.dragPointIndex = -1; 
+                    
+                    if (this.state.isBoxSelecting) {
+                        let pos = this.getMousePos(evt);
+                        let minX = Math.min(this.state.p1.x, pos.x), maxX = Math.max(this.state.p1.x, pos.x);
+                        let minY = Math.min(this.state.p1.y, pos.y), maxY = Math.max(this.state.p1.y, pos.y);
+                        
+                        let newlySelected = this.data.filter(e => {
+                            let ex = e.x !== undefined ? e.x : (e.cx !== undefined ? e.cx : (e.x1 !== undefined ? e.x1 : (e.points ? e.points[0].x : 0))); 
+                            let ey = e.y !== undefined ? e.y : (e.cy !== undefined ? e.cy : (e.y1 !== undefined ? e.y1 : (e.points ? e.points[0].y : 0)));
+                            return (ex >= minX && ex <= maxX && ey >= minY && ey <= maxY);
+                        });
+
+                        if (evt.ctrlKey) {
+                            newlySelected.forEach(ns => {
+                                if (!this.state.selectedEntities.find(se => se.id === ns.id)) this.state.selectedEntities.push(ns);
+                            });
+                        } else {
+                            this.state.selectedEntities = newlySelected;
+                        }
+                        
+                        this.state.isBoxSelecting = false;
+                        this.layerGhost.innerHTML = '';
+                        this.renderAll();
+                    } else {
+                        this.state.duplicateNextDrag = false;
+                        this.state.activeAlignX = null;
+                        this.state.activeAlignY = null;
+                        this.saveState(); 
+                    }
+                    return; 
+                }
+
+                if (this.state.tool === 'text') {
+                    if (this.state.step === 1) {
+                        let pos = this.getMousePos(evt);
+                        let x = Math.min(this.state.p1.x, pos.x);
+                        let y = Math.min(this.state.p1.y, pos.y);
+                        let w = Math.abs(pos.x - this.state.p1.x);
+                        if (w < 20) w = 60; 
+                        
+                        this.saveState();
+                        let newEnt = { type: 'text', id: Date.now(), x: x, y: y, w: w, textHtml: "Haz <b>doble clic</b> para editar.", align: 'left', fontSize: 6, style: this.getStyle() };
+                        this.data.push(newEnt);
+                        
+                        this.layerGhost.innerHTML = '';
+                        this.state.selectedEntities = [newEnt];
+                        this.cancelAction(); 
+                        
+                        this.state.tool = 'cursor';
+                        document.querySelector('.tool-btn[data-tool="cursor"]').click();
+                        this.openEditModal(newEnt);
+                    }
+                    return;
+                }
+
+                if (this.state.tool === 'eraser') {
+                    let pos = this.getMousePos(evt);
+                    let minX = Math.min(this.state.p1.x, pos.x), maxX = Math.max(this.state.p1.x, pos.x);
+                    let minY = Math.min(this.state.p1.y, pos.y), maxY = Math.max(this.state.p1.y, pos.y);
+                    this.saveState();
+                    this.data = this.data.filter(e => {
+                        let ex = e.x !== undefined ? e.x : (e.cx !== undefined ? e.cx : (e.x1 !== undefined ? e.x1 : (e.points ? e.points[0].x : 0))); 
+                        let ey = e.y !== undefined ? e.y : (e.cy !== undefined ? e.cy : (e.y1 !== undefined ? e.y1 : (e.points ? e.points[0].y : 0)));
+                        return !(ex >= minX && ex <= maxX && ey >= minY && ey <= maxY);
+                    });
+                    this.layerGhost.innerHTML = ''; this.renderAll();
+                }
+            },
+
+            renderAll() {
+                this.layerSolucion.innerHTML = '';
+                this.updateIntersections(); 
+                
+                this.data.forEach(ent => {
+                    let isRef = (this.state.referenceLine && this.state.referenceLine.id === ent.id);
+                    let isSelected = this.state.selectedEntities.some(se => se.id === ent.id);
+                    
+                    let s = ent.style || { width: 0.5, color: '#000', dash: 'none', marker: 'none', fillColor: '#ffffff' };
+                    let color = isRef || isSelected ? '#007acc' : s.color;
+                    let sw = isRef || isSelected ? parseFloat(s.width) + 1 : s.width;
+                    let dash = s.dash !== 'none' ? `stroke-dasharray="${s.dash}"` : '';
+                    
+                    let markStyle = '';
+                    if (s.marker === 'arrow') markStyle = `marker-end="url(#arrow-end)" marker-start="url(#arrow-start)"`;
+                    else if (s.marker === 'tick') markStyle = `marker-end="url(#tick)" marker-start="url(#tick)"`;
+
+                    if (ent.type === 'image') {
+                        this.layerSolucion.innerHTML += `<image x="${ent.x}" y="${ent.y}" width="${ent.width}" height="${ent.height}" href="${ent.href}" opacity="${isSelected ? 0.7 : 1}" />`;
+                        if (isSelected) {
+                            this.layerSolucion.innerHTML += `<rect x="${ent.x}" y="${ent.y}" width="${ent.width}" height="${ent.height}" fill="none" stroke="#007acc" stroke-width="1" stroke-dasharray="4,4"/>`;
+                        }
+                    } else if (ent.type === 'symbol') {
+                        let cx = ent.x, cy = ent.y;
+                        if (ent.symbolType === 'perp') {
+                            this.layerSolucion.innerHTML += `<rect x="${cx-2.5}" y="${cy-2.5}" width="5" height="5" fill="none" stroke="${color}" stroke-width="${sw}"/><circle cx="${cx}" cy="${cy}" r="${sw}" fill="${color}"/>`;
+                        } else if (ent.symbolType === 'para') {
+                            this.layerSolucion.innerHTML += `<line x1="${cx-1}" y1="${cy+3}" x2="${cx+1.5}" y2="${cy-3}" stroke="${color}" stroke-width="${sw}"/><line x1="${cx+2}" y1="${cy+3}" x2="${cx+4.5}" y2="${cy-3}" stroke="${color}" stroke-width="${sw}"/>`;
+                        } else if (ent.symbolType === 'coin') {
+                            this.layerSolucion.innerHTML += `<line x1="${cx-2.5}" y1="${cy-1.5}" x2="${cx+2.5}" y2="${cy-1.5}" stroke="${color}" stroke-width="${sw}"/><line x1="${cx-2.5}" y1="${cy}" x2="${cx+2.5}" y2="${cy}" stroke="${color}" stroke-width="${sw}"/><line x1="${cx-2.5}" y1="${cy+1.5}" x2="${cx+2.5}" y2="${cy+1.5}" stroke="${color}" stroke-width="${sw}"/>`;
+                        }
+                    } else if (ent.type === 'line') {
+                        this.layerSolucion.innerHTML += `<line x1="${ent.x1}" y1="${ent.y1}" x2="${ent.x2}" y2="${ent.y2}" stroke="${color}" stroke-width="${sw}" ${dash} ${markStyle}/>`;
+                    } else if (ent.type === 'measure') {
+                        let distStr = Math.hypot(ent.x2 - ent.x1, ent.y2 - ent.y1).toFixed(1);
+                        this.layerSolucion.innerHTML += this.getRenderCota(ent.x1, ent.y1, ent.x2, ent.y2, s, dash, markStyle, distStr, "1.0", ent.offsetDir);
+                    } else if (ent.type === 'rect') {
+                        this.layerSolucion.innerHTML += `<rect x="${ent.x}" y="${ent.y}" width="${ent.w}" height="${ent.h}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
+                    } else if (ent.type === 'circle') {
+                        this.layerSolucion.innerHTML += `<circle cx="${ent.cx}" cy="${ent.cy}" r="${ent.r}" fill="${s.fillColor !== '#ffffff' ? s.fillColor : 'none'}" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
+                        this.layerSolucion.innerHTML += `<line x1="${ent.cx-4}" y1="${ent.cy}" x2="${ent.cx+4}" y2="${ent.cy}" stroke="${color}" stroke-width="0.3"/><line x1="${ent.cx}" y1="${ent.cy-4}" x2="${ent.cx}" y2="${ent.cy+4}" stroke="${color}" stroke-width="0.3"/>`;
+                    } else if (ent.type === 'polygon') {
+                        let pts = [];
+                        for(let i=0; i<ent.sides; i++) {
+                            let a = ent.angle + (i * 2 * Math.PI / ent.sides);
+                            pts.push(`${ent.cx + ent.r * Math.cos(a)},${ent.cy + ent.r * Math.sin(a)}`);
+                        }
+                        this.layerSolucion.innerHTML += `<polygon points="${pts.join(' ')}" fill="${s.fillColor !== '#ffffff' ? s.fillColor : 'none'}" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
+                    } else if (ent.type === 'arc') {
+                        let sweep = ent.sweepAngle !== undefined ? ent.sweepAngle : (ent.endAngle - ent.startAngle < 0 ? ent.endAngle - ent.startAngle + 2 * Math.PI : ent.endAngle - ent.startAngle);
+                        let pathData = this.getSvgArcPath(ent.cx, ent.cy, ent.r, ent.startAngle, sweep);
+                        this.layerSolucion.innerHTML += `<path d="${pathData}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
+                    } else if (ent.type === 'curve') {
+                        let pathData = this.smoothPath(ent.points);
+                        this.layerSolucion.innerHTML += `<path d="${pathData}" fill="none" stroke="${color}" stroke-width="${sw}" ${dash}/>`;
+                        if (isSelected && this.state.tool === 'cursor') {
+                            ent.points.forEach(p => this.layerSolucion.innerHTML += `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#fff" stroke="#007acc" stroke-width="1.5" />`);
+                        }
+                    } else if (ent.type === 'point') {
+                        this.layerSolucion.innerHTML += `<line x1="${ent.x-3}" y1="${ent.y}" x2="${ent.x+3}" y2="${ent.y}" stroke="${color}" stroke-width="${sw}"/><line x1="${ent.x}" y1="${ent.y-3}" x2="${ent.x}" y2="${ent.y+3}" stroke="${color}" stroke-width="${sw}"/>`;
+                    } else if (ent.type === 'text') {
+                        let fontSize = ent.fontSize || 6;
+                        let textHtml = ent.textHtml || ent.text || "";
+                        this.layerSolucion.innerHTML += `<foreignObject x="${ent.x}" y="${ent.y}" width="${ent.w}" height="${ent.h || 200}">
+                            <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: sans-serif; font-size: ${fontSize}px; color: ${color}; width: 100%; height: 100%; box-sizing: border-box; overflow: visible; display: flex; flex-direction: column; text-align: ${ent.align || 'left'}; word-wrap: break-word; pointer-events: none;">
+                                ${textHtml}
+                            </div>
+                        </foreignObject>`;
+                        
+                        if (isSelected) {
+                            this.layerSolucion.innerHTML += `<rect x="${ent.x}" y="${ent.y}" width="${ent.w}" height="${ent.h || 20}" fill="none" stroke="#007acc" stroke-width="0.5" stroke-dasharray="2,2"/>`;
+                        }
+                    } else if (ent.type === 'tag') {
+                        let str_sw = ent.style && ent.style.width ? parseFloat(ent.style.width) : 0.5;
+                        this.layerSolucion.innerHTML += `<text x="${ent.x}" y="${ent.y}" fill="${color}" font-size="${ent.fontSize || Math.max(4, str_sw*4)}" font-family="${ent.fontFamily || 'sans-serif'}" transform="rotate(${ent.angle}, ${ent.x}, ${ent.y})">${ent.text}</text>`;
+                    } else if (ent.type === 'fill') {
+                        let pts = ent.points.map(p=>`${p.x},${p.y}`).join(' ');
+                        let defs = `<defs><pattern id="pat-${ent.id}" width="6" height="6" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="${s.fillColor}" /><line x1="0" y1="0" x2="0" y2="6" stroke="${color}" stroke-width="${sw}" /></pattern></defs>`;
+                        this.layerSolucion.innerHTML += `${defs}<polygon points="${pts}" fill="url(#pat-${ent.id})" stroke="${color}" stroke-width="${sw}"/>`;
+                    }
+                });
+            },
+
+            saveState() { 
+                this.history.push(JSON.stringify(this.data)); 
+                if (this.history.length > 25) this.history.shift();
+                this.redoHistory = []; 
+                this.saveToStorage(); 
+            },
+            undo() { if (this.history.length > 0) { this.redoHistory.push(JSON.stringify(this.data)); this.data = JSON.parse(this.history.pop()); this.cancelAction(); this.saveToStorage(); } },
+            redo() { if (this.redoHistory.length > 0) { this.history.push(JSON.stringify(this.data)); this.data = JSON.parse(this.redoHistory.pop()); this.cancelAction(); this.saveToStorage(); } },
+            clearAll() { if(confirm("¿Borrar todo?")) { this.saveState(); this.data = []; document.getElementById('bg-pdf-image').removeAttribute('href'); this.cancelAction(); } },
+            
+            async saveToStorage() { 
+                this.syncCurrentPage();
+                if (this.saveTimer) clearTimeout(this.saveTimer);
+                this.saveTimer = setTimeout(async () => {
+                    try {
+                        await App.DB.save('cad_state', {pages: this.pages, cur: this.currentPage, s: this.canvasSize});
+                        const st = document.getElementById('save-status');
+                        if (st) { st.innerText = "✅ Autoguardado"; st.style.color = "#0F9D58"; setTimeout(() => {st.innerText = "";}, 2000); }
+                    } catch(e) {
+                        console.error("Error IndexedDB:", e);
+                    }
+                }, 600); 
+            },
+            async loadFromStorage() { 
+                try {
+                    let p = await App.DB.load('cad_state');
+                    if (p) { 
+                        if (p.pages) this.pages = p.pages;
+                        if (p.cur !== undefined) this.currentPage = p.cur;
+                        if (p.s) { this.canvasSize = p.s; this.updateCanvas(); } 
+                    } else {
+                        this.pages = [{ data: [], history: [], redoHistory: [], bgImage: null }];
+                        this.currentPage = 0;
+                    }
+                    this.loadCurrentPage();
+                } catch (e) {
+                    this.pages = [{ data: [], history: [], redoHistory: [], bgImage: null }];
+                    this.currentPage = 0;
+                    this.loadCurrentPage();
+                }
+            },
+
+            saveToFile() {
+                this.syncCurrentPage();
+                let fileName = prompt("Nombre del archivo a descargar:", "Lamina_Educacion_Plastica");
+                if (!fileName) return;
+                const blob = new Blob([JSON.stringify({pages: this.pages, size: this.canvasSize})], {type: "application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = fileName + '.json'; a.click();
+            },
+            loadFromFile(evt) {
+                const file = evt.target.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    let p = JSON.parse(e.target.result); 
+                    if (p.data) { this.pages = [{ data: p.data, history: [], redoHistory: [], bgImage: null }]; } 
+                    else if (p.pages) { this.pages = p.pages; }
+                    this.currentPage = 0;
+                    if(p.size) { this.canvasSize = p.size; this.updateCanvas(); }
+                    this.loadCurrentPage();
+                    await this.saveToStorage();
+                }; reader.readAsText(file);
+            },
+
+            changeCanvasSize() {
+                let w = prompt("Ancho en mm:", this.canvasSize.w); let h = prompt("Alto en mm:", this.canvasSize.h);
+                if (w && h) { this.canvasSize = { w: parseFloat(w), h: parseFloat(h) }; this.updateCanvas(); this.saveToStorage(); }
+            },
+            updateCanvas() {
+                this.svg.setAttribute('viewBox', `0 0 ${this.canvasSize.w} ${this.canvasSize.h}`);
+                document.getElementById('canvas-label').innerText = `${this.canvasSize.w} x ${this.canvasSize.h} mm`;
+                this.updateCanvasDisplay();
+            },
+
+            importPDF(evt) {
+                const file = evt.target.files[0]; if (!file || file.type !== "application/pdf") return alert("Selecciona un PDF.");
+                const reader = new FileReader();
+                reader.onload = function() {
+                    const typedarray = new Uint8Array(this.result);
+                    pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+                        pdf.getPage(1).then(page => {
+                            const viewport = page.getViewport({scale: 3});
+                            const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
+                            page.render({canvasContext: canvas.getContext('2d'), viewport: viewport}).promise.then(() => {
+                                document.getElementById('bg-pdf-image').setAttribute('href', canvas.toDataURL('image/png'));
+                                App.saveToStorage(); 
+                            });
+                        });
+                    });
+                }; reader.readAsArrayBuffer(file);
+            },
+
+            async exportPDF() {
+                let pdfName = prompt("Nombre del archivo PDF:", "Lamina_Resuelta");
+                if (!pdfName) return;
+
+                this.syncCurrentPage();
+                this.snapIndicator.style.opacity = 0; this.state.hoverEntity = null; this.state.selectedEntities = []; 
+                this.renderAll(); 
+                
+                const { jsPDF } = window.jspdf;
+                let orientation = this.canvasSize.w > this.canvasSize.h ? 'l' : 'p';
+                const doc = new jsPDF(orientation, 'mm', [this.canvasSize.w, this.canvasSize.h]);
+                
+                let originalPage = this.currentPage;
+
+                for (let i = 0; i < this.pages.length; i++) {
+                    this.currentPage = i;
+                    this.loadCurrentPage();
+                    await new Promise(resolve => setTimeout(resolve, 50)); 
+                    
+                    await new Promise((resolve) => {
+                        const xml = new XMLSerializer().serializeToString(this.svg);
+                        const svg64 = btoa(unescape(encodeURIComponent(xml)));
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas'); const scale = 4;
+                            canvas.width = this.canvasSize.w * scale; canvas.height = this.canvasSize.h * scale;
+                            const ctx = canvas.getContext('2d');
+                            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            if (i > 0) doc.addPage([this.canvasSize.w, this.canvasSize.h], orientation);
+                            doc.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, this.canvasSize.w, this.canvasSize.h);
+                            resolve();
+                        }; 
+                        img.src = 'data:image/svg+xml;base64,' + svg64;
+                    });
+                }
+                
+                doc.save(pdfName + ".pdf");
+                
+                this.currentPage = originalPage;
+                this.loadCurrentPage();
+            },
+
+            bindEvents() {
+                this.svg.addEventListener('mousedown', (e) => {
+                    if (e.button === 2) return; 
+                    this.onPointerDown(e);
+                });
+                this.svg.addEventListener('mousemove', (e) => this.onPointerMove(e));
+                window.addEventListener('mouseup', (e) => {
+                    if (e.button === 2) return;
+                    this.onPointerUp(e);
+                });
+                
+                this.svg.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    if (this.state.isDrawing) {
+                        this.cancelAction(); 
+                    } else if (this.state.tool === 'cursor') {
+                        const pos = this.getMousePos(e);
+                        let hit = this.getHitEntity(pos.x, pos.y);
+                        if (hit) this.openEditModal(hit); 
+                    }
+                });
+                
+                this.svg.addEventListener('touchstart', (e) => { e.preventDefault(); this.onPointerDown(e); }, {passive: false});
+                this.svg.addEventListener('touchmove', (e) => { e.preventDefault(); this.onPointerMove(e); }, {passive: false});
+                window.addEventListener('touchend', (e) => { this.onPointerUp(e); }, {passive: false});
+                
+                document.getElementById('canvas-container').addEventListener('wheel', (e) => {
+                    if (e.ctrlKey) { e.preventDefault(); this.zoomCanvas(e.deltaY < 0 ? 10 : -10, e.clientX, e.clientY); }
+                }, {passive: false});
+            },
+
+            bindUI() {
+                const tools = document.querySelectorAll('.tool-btn[data-tool]');
+                tools.forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        tools.forEach(t => t.classList.remove('active')); btn.classList.add('active');
+                        this.cancelAction(); this.state.tool = btn.dataset.tool;
+                        document.getElementById('poly-prop').style.display = this.state.tool === 'polygon' ? 'inline-block' : 'none';
+                        document.getElementById('symbol-prop').style.display = this.state.tool === 'symbol' ? 'inline-block' : 'none';
+                    });
+                });
+            }
+        };
+
+        window.onload = () => App.init();
+    </script>
+</body>
+</html>
