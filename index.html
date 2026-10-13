@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TecniDib - V4.24</title>
+    <title>TecniDib - V4.25</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -289,8 +289,7 @@
                 alignX: new Set(),
                 alignY: new Set(),
                 activeAlignX: null,
-                activeAlignY: null,
-                downTime: 0 
+                activeAlignY: null
             },
 
             snapTolerance: 4, 
@@ -433,8 +432,8 @@
                         }
                     }
 
-                    if (e.ctrlKey && e.key.toLowerCase() === 'z') { this.undo(); e.preventDefault(); return; }
-                    if (e.ctrlKey && e.key.toLowerCase() === 'y') { this.redo(); e.preventDefault(); return; }
+                    if (e.ctrlKey && e.code === 'KeyZ') { this.undo(); e.preventDefault(); return; }
+                    if (e.ctrlKey && e.code === 'KeyY') { this.redo(); e.preventDefault(); return; }
                     
                     if (e.key === 'Escape') {
                         if(document.getElementById('crop-modal').style.display === 'flex') { this.closeCropper(); return; }
@@ -779,72 +778,9 @@
                         if (sweep < -1.999 * Math.PI) sweep = -1.999 * Math.PI;
                         this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: this.state.arcStartAngle, sweepAngle: sweep, style: sty });
                     }
-                } else if (this.state.tool === 'text') {
-                    if (this.state.step === 1) {
-                        this.state.keyboardInput = "";
-                        let x = Math.min(this.state.p1.x, this.state.p1.x + val);
-                        let y = this.state.p1.y;
-                        this.saveState();
-                        let newEnt = { type: 'text', id: Date.now(), x: x, y: y, w: val, textHtml: "Haz <b>doble clic</b> para editar.", align: 'left', fontSize: 6, style: this.getStyle() };
-                        this.data.push(newEnt);
-                        this.state.selectedEntities = [newEnt];
-                        this.cancelAction();
-                        this.state.tool = 'cursor';
-                        document.querySelector('.tool-btn[data-tool="cursor"]').click();
-                        this.openEditModal(newEnt);
-                        return;
-                    }
                 }
 
                 this.state.keyboardInput = "";
-                this.cancelAction();
-            },
-
-            finishDrawingStep1(pos, shiftKey) {
-                let finalX = pos.x, finalY = pos.y;
-                if (shiftKey && (this.state.tool === 'line' || this.state.tool === 'measure')) {
-                    let dx = Math.abs(pos.x - this.state.p1.x); let dy = Math.abs(pos.y - this.state.p1.y);
-                    if (dx > dy) finalY = this.state.p1.y; else finalX = this.state.p1.x;
-                }
-                const ghostElement = this.layerGhost.firstChild;
-                if (ghostElement && ghostElement.tagName === 'line' && !this.state.referenceLine) {
-                    finalX = parseFloat(ghostElement.getAttribute('x2')) || finalX;
-                    finalY = parseFloat(ghostElement.getAttribute('y2')) || finalY;
-                }
-                if(finalX === this.state.p1.x && finalY === this.state.p1.y) return;
-
-                if (this.state.tool === 'measure') {
-                    this.state.p2 = {x: finalX, y: finalY};
-                    this.state.step = 2;
-                    return;
-                }
-
-                if (this.state.tool === 'arc') {
-                    let dx = finalX - this.state.p1.x; let dy = finalY - this.state.p1.y;
-                    let mag = Math.hypot(dx, dy); if (mag === 0) { dx = 1; dy = 0; mag = 1; }
-                    this.state.p2 = { x: this.state.p1.x + (dx/mag)*mag, y: this.state.p1.y + (dy/mag)*mag };
-                    this.state.step = 2; 
-                    this.state.keyboardInput = ""; 
-                    this.state.arcStartAngle = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
-                    this.state.arcCurrentAngle = this.state.arcStartAngle;
-                    this.state.arcSweepAngle = 0;
-                    this.forceGhostUpdate();
-                    return; 
-                }
-
-                this.saveState(); let sty = this.getStyle();
-
-                if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
-                    this.data.push({ type: 'line', id: Date.now(), x1: this.state.p1.x, y1: this.state.p1.y, x2: finalX, y2: finalY, style: sty });
-                } else if (this.state.tool === 'circle') {
-                    let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
-                    this.data.push({ type: 'circle', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, style: sty });
-                } else if (this.state.tool === 'polygon') {
-                    let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
-                    let sides = parseInt(document.getElementById('prop-poly-sides').value) || 5;
-                    let ang = Math.atan2(finalY - this.state.p1.y, finalX - this.state.p1.x);
-                    this.data.push({ type: 'polygon', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, sides: sides, angle: ang, style: sty });
-                }
                 this.cancelAction();
             },
 
@@ -1444,9 +1380,52 @@
                         this.state.p1 = pos; 
                         this.state.step = 1; 
                         this.state.isDrawing = true;
-                        this.state.downTime = Date.now();
                     } else if (this.state.step === 1) {
-                        this.finishDrawingStep1(pos, evt.shiftKey);
+                        let finalX = pos.x, finalY = pos.y;
+                        if (evt.shiftKey && (this.state.tool === 'line' || this.state.tool === 'measure')) {
+                            let dx = Math.abs(pos.x - this.state.p1.x); let dy = Math.abs(pos.y - this.state.p1.y);
+                            if (dx > dy) finalY = this.state.p1.y; else finalX = this.state.p1.x;
+                        }
+                        const ghostElement = this.layerGhost.firstChild;
+                        if (ghostElement && ghostElement.tagName === 'line' && !this.state.referenceLine) {
+                            finalX = parseFloat(ghostElement.getAttribute('x2')) || finalX;
+                            finalY = parseFloat(ghostElement.getAttribute('y2')) || finalY;
+                        }
+                        if(finalX === this.state.p1.x && finalY === this.state.p1.y) return;
+
+                        if (this.state.tool === 'measure') {
+                            this.state.p2 = {x: finalX, y: finalY};
+                            this.state.step = 2;
+                            return;
+                        }
+
+                        if (this.state.tool === 'arc') {
+                            let dx = finalX - this.state.p1.x; let dy = finalY - this.state.p1.y;
+                            let mag = Math.hypot(dx, dy); if (mag === 0) { dx = 1; dy = 0; mag = 1; }
+                            this.state.p2 = { x: this.state.p1.x + (dx/mag)*mag, y: this.state.p1.y + (dy/mag)*mag };
+                            this.state.step = 2; 
+                            this.state.keyboardInput = ""; 
+                            this.state.arcStartAngle = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
+                            this.state.arcCurrentAngle = this.state.arcStartAngle;
+                            this.state.arcSweepAngle = 0;
+                            this.forceGhostUpdate();
+                            return; 
+                        }
+
+                        this.saveState(); let sty = this.getStyle();
+
+                        if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                            this.data.push({ type: 'line', id: Date.now(), x1: this.state.p1.x, y1: this.state.p1.y, x2: finalX, y2: finalY, style: sty });
+                        } else if (this.state.tool === 'circle') {
+                            let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
+                            this.data.push({ type: 'circle', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, style: sty });
+                        } else if (this.state.tool === 'polygon') {
+                            let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
+                            let sides = parseInt(document.getElementById('prop-poly-sides').value) || 5;
+                            let ang = Math.atan2(finalY - this.state.p1.y, finalX - this.state.p1.x);
+                            this.data.push({ type: 'polygon', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, sides: sides, angle: ang, style: sty });
+                        }
+                        this.cancelAction();
                     } else if (this.state.step === 2 && this.state.tool === 'measure') {
                         let dx = this.state.p2.x - this.state.p1.x, dy = this.state.p2.y - this.state.p1.y;
                         let mag = Math.hypot(dx, dy); let nx = 0, ny = 0; if (mag > 0) { nx = -dy/mag; ny = dx/mag; }
@@ -1676,16 +1655,6 @@
                 let kDistStr = kInput !== "" ? kInput + "_" : Math.hypot(p2x - this.state.p1.x, p2y - this.state.p1.y).toFixed(1);
 
                 if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
-                    if (this.state.tool === 'line' && this.state.step === 1) {
-                        let dx = p2x - this.state.p1.x, dy = p2y - this.state.p1.y;
-                        let mag = Math.hypot(dx, dy);
-                        if (mag > 0) {
-                            let ux = dx / mag, uy = dy / mag;
-                            let infX1 = this.state.p1.x - ux * 5000, infY1 = this.state.p1.y - uy * 5000;
-                            let infX2 = this.state.p1.x + ux * 5000, infY2 = this.state.p1.y + uy * 5000;
-                            ghostContent += `<line x1="${infX1}" y1="${infY1}" x2="${infX2}" y2="${infY2}" stroke="#007acc" stroke-width="0.2" opacity="0.3" stroke-dasharray="10,10"/>`;
-                        }
-                    }
                     ghostContent += `<line x1="${this.state.p1.x}" y1="${this.state.p1.y}" x2="${p2x}" y2="${p2y}" stroke="${s.color}" stroke-width="${s.width}" opacity="0.7" ${dash} ${markStyle}/>`;
                     let midX = (this.state.p1.x + p2x) / 2, midY = (this.state.p1.y + p2y) / 2;
                     let textAng = Math.atan2(p2y - this.state.p1.y, p2x - this.state.p1.x) * 180 / Math.PI;
@@ -1778,20 +1747,6 @@
                 if (evt.touches && evt.touches.length < 2) { this.state.initialPinchDistance = null; }
                 
                 if (!this.state.isDrawing) return;
-                
-                if (['curve', 'fill'].includes(this.state.tool)) return; 
-                
-                if (['line', 'measure', 'circle', 'polygon', 'parallel', 'perpendicular', 'line_angle', 'arc'].includes(this.state.tool)) {
-                    if (this.state.step === 1) {
-                        let pos = this.getMousePos(evt);
-                        let dist = Math.hypot(pos.x - this.state.p1.x, pos.y - this.state.p1.y);
-                        let timeElapsed = Date.now() - (this.state.downTime || 0);
-                        if (dist > 2 && timeElapsed > 200) {
-                            this.finishDrawingStep1(pos, evt.shiftKey);
-                            return;
-                        }
-                    }
-                }
                 
                 this.state.isDrawing = false;
                 
