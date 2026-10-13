@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TecniDib - V4.23</title>
+    <title>TecniDib - V4.24</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -40,8 +40,9 @@
         .tool-btn.active { background-color: var(--accent); color: #fff; }
         .tool-btn.snap-active { background-color: #2e7d32; } 
 
-        #canvas-container { grid-area: canvas; background-color: var(--bg-app); display: flex; justify-content: center; align-items: center; overflow: auto; position: relative; padding: 20px;}
-        #dibujo-svg { background-color: var(--canvas-bg); box-shadow: 0 4px 20px rgba(0,0,0,0.5); cursor: crosshair; touch-action: none; max-width: 95%; max-height: 95%; }
+        #canvas-container { grid-area: canvas; background-color: var(--bg-app); overflow: auto; position: relative; }
+        #svg-wrapper { padding: 100px; display: flex; justify-content: center; align-items: center; min-width: 100%; min-height: 100%; box-sizing: border-box; }
+        #dibujo-svg { background-color: var(--canvas-bg); box-shadow: 0 4px 20px rgba(0,0,0,0.5); cursor: crosshair; touch-action: none; flex-shrink: 0; }
 
         #snap-indicator { fill: rgba(255,0,0,0.2); stroke: red; stroke-width: 1.5; opacity: 0; pointer-events: none; }
         .selection-rect { fill: rgba(0, 122, 204, 0.2); stroke: #007acc; stroke-dasharray: 4,4; stroke-width: 1; }
@@ -59,12 +60,11 @@
         .page-btn { padding: 2px 6px; background: transparent; border: 1px solid #555; color: white; border-radius: 3px; cursor: pointer;}
         .page-btn:hover { background: #555;}
 
-        /* Novedad: Panel de Textos Enriquecidos */
         #rte-modal { display:none; position:absolute; z-index:4000; background:#2d2d2d; border:1px solid #555; padding:10px; border-radius:8px; flex-direction:column; gap:10px; box-shadow:0 10px 30px rgba(0,0,0,0.8); width: 350px;}
         .rte-toolbar { display:flex; gap:5px; flex-wrap:wrap; background:#1e1e1e; padding:5px; border-radius:4px;}
         .rte-toolbar button { background:#444; border:none; color:white; padding:4px 8px; cursor:pointer; border-radius:3px; font-weight:bold;}
         .rte-toolbar button:hover { background:#007acc;}
-        #rte-editor { background:#fff; color:#000; padding:10px; min-height:80px; max-height:200px; overflow-y:auto; border-radius:4px; font-family:sans-serif; text-align:left; outline:none; }
+        #rte-editor { background:#fff; color:#000; padding:10px; min-height:80px; max-height:200px; overflow-y:auto; border-radius:4px; font-family:sans-serif; text-align:left; outline:none; font-size: 16px;}
     </style>
 </head>
 <body>
@@ -148,7 +148,7 @@
     </div>
 
     <aside id="toolbar">
-        <button class="tool-btn" data-tool="cursor" data-key="v" title="Seleccionar/Mover [Tecla: V] (Caja Selección, CTRL soltar imán, ALT duplicar, SHIFT Mover Orto, Espacio Mano)"><svg viewBox="0 0 24 24"><path d="M5 4l14 10-5.5 1.5L16 21l-3-1-2.5-5.5L5 18z"/></svg></button>
+        <button class="tool-btn" data-tool="cursor" data-key="v" title="Seleccionar/Mover [Tecla: V] (Caja Selección, CTRL soltar imán/multiselección, ALT duplicar, SHIFT Mover Orto, Espacio Mano)"><svg viewBox="0 0 24 24"><path d="M5 4l14 10-5.5 1.5L16 21l-3-1-2.5-5.5L5 18z"/></svg></button>
         <button class="tool-btn active" data-tool="line" data-key="l" title="Segmento [Tecla: L] (Shift para Orto)"><svg viewBox="0 0 24 24"><line x1="4" y1="20" x2="20" y2="4"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg></button>
         <button class="tool-btn" data-tool="measure" data-key="m" title="Acotar ISO [Tecla: M] (1º Inicio, 2º Fin, 3º Lado)"><svg viewBox="0 0 24 24"><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="9" x2="2" y2="15"/><line x1="22" y1="9" x2="22" y2="15"/><text x="12" y="9" font-size="5" text-anchor="middle" fill="currentColor" stroke="none">mm</text></svg></button>
         <button class="tool-btn" data-tool="parallel" data-key="p" title="Paralela [Tecla: P]"><svg viewBox="0 0 24 24"><line x1="6" y1="22" x2="16" y2="2"/><line x1="10" y1="22" x2="20" y2="2"/></svg></button>
@@ -167,27 +167,29 @@
     </aside>
 
     <main id="canvas-container">
-        <svg id="dibujo-svg" viewBox="0 0 297 210" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-                <marker id="arrow-end" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
-                </marker>
-                <marker id="arrow-start" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
-                </marker>
-                <marker id="tick" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-                    <line x1="8" y1="2" x2="2" y2="8" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round"/>
-                </marker>
-                <pattern id="hatch" width="4" height="4" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-                    <line x1="0" y1="0" x2="0" y2="4" stroke="currentColor" stroke-width="0.5" />
-                </pattern>
-            </defs>
-            <image id="bg-pdf-image" x="0" y="0" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></image>
-            <g id="layer-enunciado"></g>
-            <g id="layer-solucion"></g>
-            <g id="layer-ghost"></g>
-            <circle id="snap-indicator" r="3" cx="0" cy="0" />
-        </svg>
+        <div id="svg-wrapper">
+            <svg id="dibujo-svg" viewBox="0 0 297 210" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <marker id="arrow-end" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
+                    </marker>
+                    <marker id="arrow-start" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
+                    </marker>
+                    <marker id="tick" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                        <line x1="8" y1="2" x2="2" y2="8" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round"/>
+                    </marker>
+                    <pattern id="hatch" width="4" height="4" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                        <line x1="0" y1="0" x2="0" y2="4" stroke="currentColor" stroke-width="0.5" />
+                    </pattern>
+                </defs>
+                <image id="bg-pdf-image" x="0" y="0" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"></image>
+                <g id="layer-enunciado"></g>
+                <g id="layer-solucion"></g>
+                <g id="layer-ghost"></g>
+                <circle id="snap-indicator" r="3" cx="0" cy="0" />
+            </svg>
+        </div>
 
         <div id="edit-modal">
             <h3>Propiedades del Elemento</h3>
@@ -198,7 +200,6 @@
             </div>
         </div>
         
-        <!-- Novedad: Editor de Textos Enriquecidos -->
         <div id="rte-modal">
             <div class="rte-toolbar">
                 <button onclick="document.execCommand('bold', false, null)" title="Negrita"><b>B</b></button>
@@ -212,7 +213,7 @@
                 <button onclick="document.execCommand('justifyRight', false, null)">⫸</button>
                 <button onclick="document.execCommand('justifyFull', false, null)">▤</button>
                 <div style="border-left: 1px solid #555; margin: 0 2px;"></div>
-                <input type="number" id="rte-size" value="12" style="width:40px; padding:2px;" title="Tamaño (pt)">
+                <input type="number" id="rte-size" value="6" style="width:40px; padding:2px;" title="Tamaño (pt)">
                 <button onclick="App.applyFontSize()" title="Aplicar Tamaño">T</button>
                 <input type="color" id="rte-color" style="width:25px; height:22px; padding:0;" onchange="document.execCommand('foreColor', false, this.value)" title="Color Seleccion">
             </div>
@@ -288,7 +289,8 @@
                 alignX: new Set(),
                 alignY: new Set(),
                 activeAlignX: null,
-                activeAlignY: null
+                activeAlignY: null,
+                downTime: 0 
             },
 
             snapTolerance: 4, 
@@ -341,7 +343,6 @@
                 window.addEventListener('keydown', (e) => {
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
 
-                    // NOVEDAD: Paneo con Espacio
                     if (e.code === 'Space') {
                         e.preventDefault();
                         if (!this.state.isPanning) {
@@ -357,7 +358,7 @@
                     
                     if (!e.ctrlKey && !e.shiftKey && !e.altKey && e.code.startsWith('Key')) {
                         const letKey = e.code.replace('Key', '').toLowerCase();
-                        if (letKey !== 'd' && letKey !== 'c' && letKey !== 'v') {
+                        if (letKey !== 'd' && letKey !== 'c' && letKey !== 'v' && letKey !== 'z' && letKey !== 'y') {
                             const btn = document.querySelector(`.tool-btn[data-key="${letKey}"]`);
                             if (btn) { btn.click(); return; }
                         } else if (letKey === 'v') {
@@ -420,7 +421,7 @@
                         }
                     }
                     
-                    if (this.state.isDrawing && ['line', 'measure', 'circle', 'polygon', 'arc', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                    if (this.state.isDrawing && ['line', 'measure', 'circle', 'polygon', 'arc', 'parallel', 'perpendicular', 'line_angle', 'text'].includes(this.state.tool)) {
                         if (/^[0-9\.]$/.test(e.key)) {
                             this.state.keyboardInput += e.key; this.forceGhostUpdate(); return;
                         }
@@ -432,8 +433,9 @@
                         }
                     }
 
-                    if (e.ctrlKey && e.code === 'KeyZ') { this.undo(); e.preventDefault(); return; }
-                    if (e.ctrlKey && e.code === 'KeyY') { this.redo(); e.preventDefault(); return; }
+                    if (e.ctrlKey && e.key.toLowerCase() === 'z') { this.undo(); e.preventDefault(); return; }
+                    if (e.ctrlKey && e.key.toLowerCase() === 'y') { this.redo(); e.preventDefault(); return; }
+                    
                     if (e.key === 'Escape') {
                         if(document.getElementById('crop-modal').style.display === 'flex') { this.closeCropper(); return; }
                         if(document.getElementById('edit-modal').style.display === 'block') { this.closeEditModal(); return; }
@@ -454,6 +456,7 @@
                     if (e.code === 'Space') {
                         this.state.isPanning = false;
                         this.svg.style.cursor = 'crosshair';
+                        if (this.state.panStart) this.state.panStart = null;
                     }
                     if (e.key === 'Control') {
                         if (this.config.snapEnabled) document.getElementById('btn-snap').classList.add('snap-active');
@@ -698,28 +701,30 @@
                 this.state.zoomLevel = Math.max(20, Math.min(1000, this.state.zoomLevel + delta));
                 document.getElementById('zoom-label').innerText = `${this.state.zoomLevel}%`;
                 
+                let scaleFactor = this.state.zoomLevel / prevZoom;
                 const container = document.getElementById('canvas-container');
-                const svg = document.getElementById('dibujo-svg');
 
                 if (mouseX !== null && mouseY !== null) {
                     let rect = container.getBoundingClientRect();
                     let mx = mouseX - rect.left;
                     let my = mouseY - rect.top;
-
+                    
                     let scrollX = container.scrollLeft + mx;
                     let scrollY = container.scrollTop + my;
-
-                    svg.style.width = `${this.state.zoomLevel}%`;
-                    let scaleFactor = this.state.zoomLevel / prevZoom;
-
+                    
+                    this.updateCanvasDisplay();
+                    
                     container.scrollLeft = scrollX * scaleFactor - mx;
                     container.scrollTop = scrollY * scaleFactor - my;
                 } else {
-                    svg.style.width = `${this.state.zoomLevel}%`;
+                    this.updateCanvasDisplay();
                 }
+            },
 
-                if (this.state.zoomLevel > 100) { container.style.justifyContent = 'flex-start'; container.style.alignItems = 'flex-start'; } 
-                else { container.style.justifyContent = 'center'; container.style.alignItems = 'center'; }
+            updateCanvasDisplay() {
+                let scale = this.state.zoomLevel / 100;
+                this.svg.style.width = `${this.canvasSize.w * scale}mm`;
+                this.svg.style.height = `${this.canvasSize.h * scale}mm`;
             },
 
             forceGhostUpdate() { if (this.state.lastEvent) this.onPointerMove(this.state.lastEvent); },
@@ -774,9 +779,72 @@
                         if (sweep < -1.999 * Math.PI) sweep = -1.999 * Math.PI;
                         this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: this.state.arcStartAngle, sweepAngle: sweep, style: sty });
                     }
+                } else if (this.state.tool === 'text') {
+                    if (this.state.step === 1) {
+                        this.state.keyboardInput = "";
+                        let x = Math.min(this.state.p1.x, this.state.p1.x + val);
+                        let y = this.state.p1.y;
+                        this.saveState();
+                        let newEnt = { type: 'text', id: Date.now(), x: x, y: y, w: val, textHtml: "Haz <b>doble clic</b> para editar.", align: 'left', fontSize: 6, style: this.getStyle() };
+                        this.data.push(newEnt);
+                        this.state.selectedEntities = [newEnt];
+                        this.cancelAction();
+                        this.state.tool = 'cursor';
+                        document.querySelector('.tool-btn[data-tool="cursor"]').click();
+                        this.openEditModal(newEnt);
+                        return;
+                    }
                 }
 
                 this.state.keyboardInput = "";
+                this.cancelAction();
+            },
+
+            finishDrawingStep1(pos, shiftKey) {
+                let finalX = pos.x, finalY = pos.y;
+                if (shiftKey && (this.state.tool === 'line' || this.state.tool === 'measure')) {
+                    let dx = Math.abs(pos.x - this.state.p1.x); let dy = Math.abs(pos.y - this.state.p1.y);
+                    if (dx > dy) finalY = this.state.p1.y; else finalX = this.state.p1.x;
+                }
+                const ghostElement = this.layerGhost.firstChild;
+                if (ghostElement && ghostElement.tagName === 'line' && !this.state.referenceLine) {
+                    finalX = parseFloat(ghostElement.getAttribute('x2')) || finalX;
+                    finalY = parseFloat(ghostElement.getAttribute('y2')) || finalY;
+                }
+                if(finalX === this.state.p1.x && finalY === this.state.p1.y) return;
+
+                if (this.state.tool === 'measure') {
+                    this.state.p2 = {x: finalX, y: finalY};
+                    this.state.step = 2;
+                    return;
+                }
+
+                if (this.state.tool === 'arc') {
+                    let dx = finalX - this.state.p1.x; let dy = finalY - this.state.p1.y;
+                    let mag = Math.hypot(dx, dy); if (mag === 0) { dx = 1; dy = 0; mag = 1; }
+                    this.state.p2 = { x: this.state.p1.x + (dx/mag)*mag, y: this.state.p1.y + (dy/mag)*mag };
+                    this.state.step = 2; 
+                    this.state.keyboardInput = ""; 
+                    this.state.arcStartAngle = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
+                    this.state.arcCurrentAngle = this.state.arcStartAngle;
+                    this.state.arcSweepAngle = 0;
+                    this.forceGhostUpdate();
+                    return; 
+                }
+
+                this.saveState(); let sty = this.getStyle();
+
+                if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                    this.data.push({ type: 'line', id: Date.now(), x1: this.state.p1.x, y1: this.state.p1.y, x2: finalX, y2: finalY, style: sty });
+                } else if (this.state.tool === 'circle') {
+                    let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
+                    this.data.push({ type: 'circle', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, style: sty });
+                } else if (this.state.tool === 'polygon') {
+                    let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
+                    let sides = parseInt(document.getElementById('prop-poly-sides').value) || 5;
+                    let ang = Math.atan2(finalY - this.state.p1.y, finalX - this.state.p1.x);
+                    this.data.push({ type: 'polygon', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, sides: sides, angle: ang, style: sty });
+                }
                 this.cancelAction();
             },
 
@@ -819,7 +887,6 @@
                 this.snapIndicator.style.opacity = 0;
             },
 
-            // --- NOVEDAD: ALGORITMO DE INTERSECCIONES 100% MATEMÁTICO ---
             updateIntersections() {
                 this.intersections = [];
                 let segs = [];
@@ -918,41 +985,78 @@
             },
 
             getHitEntity(x, y) {
-                let hit = null, minDist = 4; 
+                let hit = null, minDist = 6; 
                 this.data.forEach(ent => {
+                    let d = Infinity;
+                    
                     if (ent.type === 'line' || ent.type === 'measure') {
-                        let d = this.distPointToSegment({x, y}, {x: ent.x1, y: ent.y1}, {x: ent.x2, y: ent.y2});
-                        if (d < minDist) { minDist = d; hit = ent; }
+                        d = this.distPointToSegment({x, y}, {x: ent.x1, y: ent.y1}, {x: ent.x2, y: ent.y2});
                     } else if (ent.type === 'rect') {
                         let pts = [{x: ent.x, y: ent.y}, {x: ent.x + ent.w, y: ent.y}, {x: ent.x + ent.w, y: ent.y + ent.h}, {x: ent.x, y: ent.y + ent.h}];
                         for (let i = 0; i < 4; i++) {
-                            let next = (i + 1) % 4; let d = this.distPointToSegment({x,y}, pts[i], pts[next]);
-                            if (d < minDist) { minDist = d; hit = ent; }
+                            let ds = this.distPointToSegment({x,y}, pts[i], pts[(i + 1) % 4]);
+                            if (ds < d) d = ds;
                         }
-                    } else if (ent.type === 'circle' || ent.type === 'polygon') {
-                        let d = Math.abs(Math.hypot(ent.cx - x, ent.cy - y) - ent.r);
-                        if (d < minDist) { minDist = d; hit = ent; }
+                    } else if (ent.type === 'circle') {
+                        d = Math.abs(Math.hypot(ent.cx - x, ent.cy - y) - ent.r);
+                    } else if (ent.type === 'polygon') {
+                        let pts = [];
+                        for(let i=0; i<ent.sides; i++) {
+                            let a = ent.angle + (i * 2 * Math.PI / ent.sides);
+                            pts.push({x: ent.cx + ent.r * Math.cos(a), y: ent.cy + ent.r * Math.sin(a)});
+                        }
+                        for (let i = 0; i < ent.sides; i++) {
+                            let ds = this.distPointToSegment({x,y}, pts[i], pts[(i + 1) % ent.sides]);
+                            if (ds < d) d = ds;
+                        }
                     } else if (ent.type === 'arc') {
-                        let d = Math.abs(Math.hypot(ent.cx - x, ent.cy - y) - ent.r);
-                        if (d < minDist) { minDist = d; hit = ent; }
+                        let distCenter = Math.hypot(ent.cx - x, ent.cy - y);
+                        let dRad = Math.abs(distCenter - ent.r);
+                        if (dRad <= minDist) {
+                            let aMouse = Math.atan2(y - ent.cy, x - ent.cx);
+                            let sweep = ent.sweepAngle !== undefined ? ent.sweepAngle : (ent.endAngle - ent.startAngle < 0 ? ent.endAngle - ent.startAngle + 2 * Math.PI : ent.endAngle - ent.startAngle);
+                            let sA = ent.startAngle;
+                            let eA = sA + sweep;
+                            if (sweep < 0) { sA = eA; eA = ent.startAngle; }
+                            
+                            while (aMouse < sA - 0.1) aMouse += 2 * Math.PI;
+                            while (aMouse >= sA + 2 * Math.PI - 0.1) aMouse -= 2 * Math.PI;
+                            
+                            if (aMouse <= eA + 0.1 || Math.abs(sweep) >= Math.PI * 1.99) {
+                                d = dRad;
+                            }
+                        }
                     } else if (ent.type === 'point' || ent.type === 'tag' || ent.type === 'symbol') {
-                        if (Math.hypot(ent.x - x, ent.y - y) < 6) { hit = ent; minDist = 0; }
+                        d = Math.hypot(ent.x - x, ent.y - y);
+                        if (d < minDist + 2) d = Math.max(0, d - 2); 
                     } else if (ent.type === 'curve') {
-                        ent.points.forEach(p => { if (Math.hypot(p.x - x, p.y - y) < 8) { hit = ent; minDist = 0; }});
+                        for (let i = 0; i < ent.points.length - 1; i++) {
+                            let ds = this.distPointToSegment({x,y}, ent.points[i], ent.points[i+1]);
+                            if (ds < d) d = ds;
+                        }
+                        ent.points.forEach(p => {
+                            let dp = Math.hypot(p.x - x, p.y - y);
+                            if (dp < d) d = dp;
+                        });
                     } else if (ent.type === 'fill') {
                         for (let i = 0; i < ent.points.length; i++) {
-                            let next = (i + 1) % ent.points.length; let d = this.distPointToSegment({x,y}, ent.points[i], ent.points[next]);
-                            if (d < minDist) { minDist = d; hit = ent; }
+                            let ds = this.distPointToSegment({x,y}, ent.points[i], ent.points[(i + 1) % ent.points.length]);
+                            if (ds < d) d = ds;
                         }
                     } else if (ent.type === 'image') {
                         if (x >= ent.x && x <= ent.x + ent.width && y >= ent.y && y <= ent.y + ent.height) {
-                            hit = ent; minDist = 0;
+                            d = 0;
                         }
                     } else if (ent.type === 'text') {
                         let h = ent.h || 20;
                         if (x >= ent.x && x <= ent.x + ent.w && y >= ent.y && y <= ent.y + h) {
-                            hit = ent; minDist = 0;
+                            d = 0;
                         }
+                    }
+
+                    if (d <= minDist) {
+                        minDist = d;
+                        hit = ent;
                     }
                 });
                 return hit;
@@ -1021,9 +1125,9 @@
                         }
                     } else if (ent.type === 'arc') {
                         let dc = Math.hypot(ent.cx - x, ent.cy - y); if (dc < minDistance) { minDistance = dc; bestSnap = {x: ent.cx, y: ent.cy}; }
-                        let endA = ent.sweepAngle !== undefined ? ent.startAngle + ent.sweepAngle : ent.endAngle;
+                        let endA = ent.sweepAngle !== undefined ? ent.sweepAngle : (ent.endAngle - ent.startAngle);
                         let px1 = ent.cx + ent.r * Math.cos(ent.startAngle); let py1 = ent.cy + ent.r * Math.sin(ent.startAngle);
-                        let px2 = ent.cx + ent.r * Math.cos(endA); let py2 = ent.cy + ent.r * Math.sin(endA);
+                        let px2 = ent.cx + ent.r * Math.cos(ent.startAngle + endA); let py2 = ent.cy + ent.r * Math.sin(ent.startAngle + endA);
                         [{x: px1, y: py1}, {x: px2, y: py2}].forEach(p => { let dp = Math.hypot(p.x - x, p.y - y); if (dp < minDistance) { minDistance = dp; bestSnap = p; } });
                     } else if (ent.type === 'image') {
                         let pts = [
@@ -1049,8 +1153,16 @@
 
             getMousePos(evt) {
                 const CTM = this.svg.getScreenCTM();
-                let clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-                let clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+                let clientX = evt.clientX;
+                let clientY = evt.clientY;
+                if (evt.touches && evt.touches.length > 0) {
+                    clientX = evt.touches[0].clientX;
+                    clientY = evt.touches[0].clientY;
+                } else if (evt.changedTouches && evt.changedTouches.length > 0) {
+                    clientX = evt.changedTouches[0].clientX;
+                    clientY = evt.changedTouches[0].clientY;
+                }
+                
                 let rawX = (clientX - CTM.e) / CTM.a; let rawY = (clientY - CTM.f) / CTM.d;
                 
                 if (evt.ctrlKey || !this.config.snapEnabled) {
@@ -1061,7 +1173,6 @@
                 return this.calculateSnap(rawX, rawY);
             },
 
-            // --- NOVEDAD: EDITOR DE TEXTOS ENRIQUECIDO ---
             openEditModal(ent) {
                 this.state.editingEntity = ent;
                 
@@ -1072,20 +1183,17 @@
                     const CTM = this.svg.getScreenCTM();
                     let screenX = (ent.x * CTM.a) + CTM.e;
                     let screenY = (ent.y * CTM.d) + CTM.f;
-                    let zoomScale = this.state.zoomLevel / 100;
                     
                     rModal.style.left = `${Math.max(10, screenX)}px`;
                     rModal.style.top = `${Math.max(60, screenY)}px`;
                     
                     rEditor.innerHTML = ent.textHtml || ent.text || "";
-                    rEditor.style.fontSize = `${ent.fontSize || 12}px`;
-                    document.getElementById('rte-size').value = ent.fontSize || 12;
+                    document.getElementById('rte-size').value = ent.fontSize || 6;
                     document.getElementById('rte-color').value = ent.style ? ent.style.color : '#000000';
                     
                     rModal.style.display = 'flex';
                     rEditor.focus();
                     
-                    // Ocultamos temporalmente el SVG para no verlo duplicado
                     this.renderAll(); 
                     return;
                 }
@@ -1128,11 +1236,10 @@
                 if(!ent) return;
                 this.saveState();
                 ent.textHtml = document.getElementById('rte-editor').innerHTML;
-                ent.fontSize = parseFloat(document.getElementById('rte-size').value) || 12;
+                ent.fontSize = parseFloat(document.getElementById('rte-size').value) || 6;
                 if (!ent.style) ent.style = { width: 0.5, color: document.getElementById('rte-color').value, dash: 'none', marker: 'none', fillColor: '#ffffff' };
                 else ent.style.color = document.getElementById('rte-color').value;
                 
-                // Extraer altura real tras edición para caja
                 const el = document.getElementById('rte-editor');
                 let realH = el.scrollHeight;
                 let ratio = ent.w / el.clientWidth;
@@ -1241,7 +1348,6 @@
                             hit.points.forEach((p, idx) => { if (Math.hypot(p.x - pos.x, p.y - pos.y) < 6) this.state.dragPointIndex = idx; });
                         } else { this.state.dragPointIndex = -1; }
                         
-                        // Cargar Guías de Alineación Inteligentes
                         this.state.alignX.clear(); this.state.alignY.clear();
                         this.data.forEach(ent => {
                             if (!this.state.selectedEntities.find(se => se.id === ent.id)) {
@@ -1318,7 +1424,7 @@
                     return;
                 }
 
-                if (['line', 'measure', 'circle', 'polygon', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                if (['line', 'measure', 'circle', 'polygon', 'parallel', 'perpendicular', 'line_angle', 'arc'].includes(this.state.tool)) {
                     
                     if (['parallel', 'perpendicular', 'line_angle'].includes(this.state.tool) && !this.state.referenceLine) {
                         let hit = this.getHitEntity(pos.x, pos.y);
@@ -1335,39 +1441,12 @@
                     }
 
                     if (this.state.step === 0) {
-                        this.state.p1 = pos; this.state.step = 1; this.state.isDrawing = true;
+                        this.state.p1 = pos; 
+                        this.state.step = 1; 
+                        this.state.isDrawing = true;
+                        this.state.downTime = Date.now();
                     } else if (this.state.step === 1) {
-                        let finalX = pos.x, finalY = pos.y;
-                        if (evt.shiftKey && (this.state.tool === 'line' || this.state.tool === 'measure')) {
-                            let dx = Math.abs(pos.x - this.state.p1.x); let dy = Math.abs(pos.y - this.state.p1.y);
-                            if (dx > dy) finalY = this.state.p1.y; else finalX = this.state.p1.x;
-                        }
-                        const ghostElement = this.layerGhost.firstChild;
-                        if (ghostElement && ghostElement.tagName === 'line') {
-                            finalX = parseFloat(ghostElement.getAttribute('x2')); finalY = parseFloat(ghostElement.getAttribute('y2'));
-                        }
-                        if(finalX === this.state.p1.x && finalY === this.state.p1.y) return;
-
-                        if (this.state.tool === 'measure') {
-                            this.state.p2 = {x: finalX, y: finalY};
-                            this.state.step = 2;
-                            return;
-                        }
-
-                        this.saveState(); let sty = this.getStyle();
-
-                        if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
-                            this.data.push({ type: 'line', id: Date.now(), x1: this.state.p1.x, y1: this.state.p1.y, x2: finalX, y2: finalY, style: sty });
-                        } else if (this.state.tool === 'circle') {
-                            let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
-                            this.data.push({ type: 'circle', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, style: sty });
-                        } else if (this.state.tool === 'polygon') {
-                            let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
-                            let sides = parseInt(document.getElementById('prop-poly-sides').value) || 5;
-                            let ang = Math.atan2(finalY - this.state.p1.y, finalX - this.state.p1.x);
-                            this.data.push({ type: 'polygon', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, sides: sides, angle: ang, style: sty });
-                        }
-                        this.cancelAction();
+                        this.finishDrawingStep1(pos, evt.shiftKey);
                     } else if (this.state.step === 2 && this.state.tool === 'measure') {
                         let dx = this.state.p2.x - this.state.p1.x, dy = this.state.p2.y - this.state.p1.y;
                         let mag = Math.hypot(dx, dy); let nx = 0, ny = 0; if (mag > 0) { nx = -dy/mag; ny = dx/mag; }
@@ -1376,6 +1455,11 @@
                         
                         this.saveState();
                         this.data.push({ type: 'measure', id: Date.now(), x1: this.state.p1.x, y1: this.state.p1.y, x2: this.state.p2.x, y2: this.state.p2.y, offsetDir: dir, style: this.getStyle() });
+                        this.cancelAction();
+                    } else if (this.state.step === 2 && this.state.tool === 'arc') {
+                        this.saveState();
+                        let r = Math.hypot(this.state.p2.x - this.state.p1.x, this.state.p2.y - this.state.p1.y);
+                        this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: this.state.arcStartAngle, sweepAngle: this.state.arcSweepAngle, style: this.getStyle() });
                         this.cancelAction();
                     }
                     return;
@@ -1388,28 +1472,6 @@
                         if (Math.hypot(pos.x - lastPt.x, pos.y - lastPt.y) < 3) {
                             this.saveState(); this.data.push({ type: 'curve', id: Date.now(), points: [...this.state.p1], style: this.getStyle() }); this.cancelAction();
                         } else { this.state.p1.push(pos); }
-                    }
-                    return;
-                }
-
-                if (this.state.tool === 'arc') {
-                    if (this.state.step === 0) { 
-                        this.state.p1 = pos; 
-                        this.state.step = 1; 
-                        this.state.isDrawing = true; 
-                    } 
-                    else if (this.state.step === 1) { 
-                        this.state.p2 = pos; 
-                        this.state.step = 2; 
-                        this.state.arcStartAngle = Math.atan2(pos.y - this.state.p1.y, pos.x - this.state.p1.x);
-                        this.state.arcCurrentAngle = this.state.arcStartAngle;
-                        this.state.arcSweepAngle = 0;
-                    } 
-                    else if (this.state.step === 2) {
-                        this.saveState();
-                        let r = Math.hypot(this.state.p2.x - this.state.p1.x, this.state.p2.y - this.state.p1.y);
-                        this.data.push({ type: 'arc', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, startAngle: this.state.arcStartAngle, sweepAngle: this.state.arcSweepAngle, style: this.getStyle() });
-                        this.cancelAction();
                     }
                     return;
                 }
@@ -1532,18 +1594,18 @@
                             }
 
                             let curX = pos.x; let curY = pos.y;
-                            
-                            // Movimiento Ortogonal
                             if (evt.shiftKey) {
-                                if (Math.abs(curX - this.state.dragStart.x) > Math.abs(curY - this.state.dragStart.y)) { curY = this.state.dragStart.y; } 
-                                else { curX = this.state.dragStart.x; }
+                                if (Math.abs(curX - this.state.dragStart.x) > Math.abs(curY - this.state.dragStart.y)) {
+                                    curY = this.state.dragStart.y;
+                                } else {
+                                    curX = this.state.dragStart.x;
+                                }
                             }
 
-                            // NOVEDAD: Guías de Alineación Inteligente
                             this.state.activeAlignX = null;
                             this.state.activeAlignY = null;
                             if (this.config.snapEnabled && !evt.ctrlKey) {
-                                let bestDX = 2; // Tolerancia 2mm
+                                let bestDX = 2; 
                                 this.state.alignX.forEach(ax => {
                                     if (Math.abs(curX - ax) < bestDX) { bestDX = Math.abs(curX - ax); this.state.activeAlignX = ax; }
                                 });
@@ -1614,7 +1676,6 @@
                 let kDistStr = kInput !== "" ? kInput + "_" : Math.hypot(p2x - this.state.p1.x, p2y - this.state.p1.y).toFixed(1);
 
                 if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
-                    // NOVEDAD: Línea auxiliar infinita (Regla)
                     if (this.state.tool === 'line' && this.state.step === 1) {
                         let dx = p2x - this.state.p1.x, dy = p2y - this.state.p1.y;
                         let mag = Math.hypot(dx, dy);
@@ -1699,7 +1760,6 @@
                 
                 this.layerGhost.innerHTML = ghostContent + overlayText;
 
-                // Render Guias de Alineación Activas
                 if (this.state.activeAlignX !== null) {
                     this.layerGhost.innerHTML += `<line x1="${this.state.activeAlignX}" y1="-5000" x2="${this.state.activeAlignX}" y2="5000" stroke="#007acc" stroke-width="0.2" stroke-dasharray="4,4" opacity="0.7"/>`;
                 }
@@ -1718,7 +1778,20 @@
                 if (evt.touches && evt.touches.length < 2) { this.state.initialPinchDistance = null; }
                 
                 if (!this.state.isDrawing) return;
-                if (['arc', 'curve', 'fill', 'line', 'measure', 'circle', 'polygon', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) return; 
+                
+                if (['curve', 'fill'].includes(this.state.tool)) return; 
+                
+                if (['line', 'measure', 'circle', 'polygon', 'parallel', 'perpendicular', 'line_angle', 'arc'].includes(this.state.tool)) {
+                    if (this.state.step === 1) {
+                        let pos = this.getMousePos(evt);
+                        let dist = Math.hypot(pos.x - this.state.p1.x, pos.y - this.state.p1.y);
+                        let timeElapsed = Date.now() - (this.state.downTime || 0);
+                        if (dist > 2 && timeElapsed > 200) {
+                            this.finishDrawingStep1(pos, evt.shiftKey);
+                            return;
+                        }
+                    }
+                }
                 
                 this.state.isDrawing = false;
                 
@@ -1765,7 +1838,7 @@
                         if (w < 20) w = 60; 
                         
                         this.saveState();
-                        let newEnt = { type: 'text', id: Date.now(), x: x, y: y, w: w, textHtml: "Haz <b>doble clic</b> para editar.", align: 'left', fontSize: 10, style: this.getStyle() };
+                        let newEnt = { type: 'text', id: Date.now(), x: x, y: y, w: w, textHtml: "Haz <b>doble clic</b> para editar.", align: 'left', fontSize: 6, style: this.getStyle() };
                         this.data.push(newEnt);
                         
                         this.layerGhost.innerHTML = '';
@@ -1787,7 +1860,7 @@
                     this.data = this.data.filter(e => {
                         let ex = e.x !== undefined ? e.x : (e.cx !== undefined ? e.cx : (e.x1 !== undefined ? e.x1 : (e.points ? e.points[0].x : 0))); 
                         let ey = e.y !== undefined ? e.y : (e.cy !== undefined ? e.cy : (e.y1 !== undefined ? e.y1 : (e.points ? e.points[0].y : 0)));
-                        return !(ex >= minX && x <= maxX && ey >= minY && ey <= maxY);
+                        return !(ex >= minX && ex <= maxX && ey >= minY && ey <= maxY);
                     });
                     this.layerGhost.innerHTML = ''; this.renderAll();
                 }
@@ -1854,15 +1927,15 @@
                     } else if (ent.type === 'point') {
                         this.layerSolucion.innerHTML += `<line x1="${ent.x-3}" y1="${ent.y}" x2="${ent.x+3}" y2="${ent.y}" stroke="${color}" stroke-width="${sw}"/><line x1="${ent.x}" y1="${ent.y-3}" x2="${ent.x}" y2="${ent.y+3}" stroke="${color}" stroke-width="${sw}"/>`;
                     } else if (ent.type === 'text') {
-                        let fontSize = ent.fontSize || 12;
+                        let fontSize = ent.fontSize || 6;
                         let textHtml = ent.textHtml || ent.text || "";
                         this.layerSolucion.innerHTML += `<foreignObject x="${ent.x}" y="${ent.y}" width="${ent.w}" height="${ent.h || 200}">
-                            <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: sans-serif; font-size: ${fontSize}px; color: ${color}; width: 100%; height: 100%; box-sizing: border-box; overflow: visible; display: flex; flex-direction: column; text-align: ${ent.align || 'left'}; word-wrap: break-word;">
+                            <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: sans-serif; font-size: ${fontSize}px; color: ${color}; width: 100%; height: 100%; box-sizing: border-box; overflow: visible; display: flex; flex-direction: column; text-align: ${ent.align || 'left'}; word-wrap: break-word; pointer-events: none;">
                                 ${textHtml}
                             </div>
                         </foreignObject>`;
                         
-                        if (isSelected && this.state.tool === 'cursor') {
+                        if (isSelected) {
                             this.layerSolucion.innerHTML += `<rect x="${ent.x}" y="${ent.y}" width="${ent.w}" height="${ent.h || 20}" fill="none" stroke="#007acc" stroke-width="0.5" stroke-dasharray="2,2"/>`;
                         }
                     } else if (ent.type === 'tag') {
@@ -1947,6 +2020,7 @@
             updateCanvas() {
                 this.svg.setAttribute('viewBox', `0 0 ${this.canvasSize.w} ${this.canvasSize.h}`);
                 document.getElementById('canvas-label').innerText = `${this.canvasSize.w} x ${this.canvasSize.h} mm`;
+                this.updateCanvasDisplay();
             },
 
             importPDF(evt) {
@@ -1973,7 +2047,7 @@
 
                 this.syncCurrentPage();
                 this.snapIndicator.style.opacity = 0; this.state.hoverEntity = null; this.state.selectedEntities = []; 
-                this.renderAll(); // Forza limpiar selecciones antes de exportar
+                this.renderAll(); 
                 
                 const { jsPDF } = window.jspdf;
                 let orientation = this.canvasSize.w > this.canvasSize.h ? 'l' : 'p';
@@ -2016,7 +2090,7 @@
                     this.onPointerDown(e);
                 });
                 this.svg.addEventListener('mousemove', (e) => this.onPointerMove(e));
-                this.svg.addEventListener('mouseup', (e) => {
+                window.addEventListener('mouseup', (e) => {
                     if (e.button === 2) return;
                     this.onPointerUp(e);
                 });
@@ -2034,7 +2108,7 @@
                 
                 this.svg.addEventListener('touchstart', (e) => { e.preventDefault(); this.onPointerDown(e); }, {passive: false});
                 this.svg.addEventListener('touchmove', (e) => { e.preventDefault(); this.onPointerMove(e); }, {passive: false});
-                this.svg.addEventListener('touchend', (e) => { e.preventDefault(); this.onPointerUp(e); }, {passive: false});
+                window.addEventListener('touchend', (e) => { this.onPointerUp(e); }, {passive: false});
                 
                 document.getElementById('canvas-container').addEventListener('wheel', (e) => {
                     if (e.ctrlKey) { e.preventDefault(); this.zoomCanvas(e.deltaY < 0 ? 10 : -10, e.clientX, e.clientY); }
