@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Motor CAD Educación Plástica - V4.26</title>
+    <title>Motor CAD Educación Plástica - V4.27</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -355,10 +355,18 @@
                         this.forceGhostUpdate();
                     }
                     
-                    if (!e.ctrlKey && !e.shiftKey && !e.altKey && /^[a-z]$/i.test(e.key)) {
-                        const keyChar = e.key.toLowerCase();
-                        const btn = document.querySelector(`.tool-btn[data-key="${keyChar}"]`);
-                        if (btn) { btn.click(); return; }
+                    if (!e.ctrlKey && !e.shiftKey && !e.altKey && e.code.startsWith('Key')) {
+                        const letKey = e.code.replace('Key', '').toLowerCase();
+                        if (letKey !== 'd' && letKey !== 'c' && letKey !== 'v' && letKey !== 'z' && letKey !== 'y') {
+                            const btn = document.querySelector(`.tool-btn[data-key="${letKey}"]`);
+                            if (btn) { btn.click(); return; }
+                        } else if (letKey === 'v') {
+                            const btn = document.querySelector(`.tool-btn[data-key="v"]`);
+                            if (btn) { btn.click(); return; }
+                        } else if (letKey === 'c') {
+                            const btn = document.querySelector(`.tool-btn[data-key="c"]`);
+                            if (btn) { btn.click(); return; }
+                        }
                     }
 
                     if ((e.key === 'Alt' || e.key.toLowerCase() === 'd') && !e.repeat && !e.ctrlKey) {
@@ -723,7 +731,6 @@
                 const container = document.getElementById('canvas-container');
                 const wrapper = document.getElementById('svg-wrapper');
                 
-                // Desactivar centrado flexbox si el contenido es más grande que el contenedor para evitar bloqueo de scroll
                 let svgRect = this.svg.getBoundingClientRect();
                 if (svgRect.width > container.clientWidth - 40) {
                     wrapper.style.justifyContent = 'flex-start';
@@ -1392,8 +1399,66 @@
                         this.state.p1 = pos; 
                         this.state.step = 1; 
                         this.state.isDrawing = true;
+                        // Proveemos un vector por defecto seguro (Hacia la derecha) para poder escribir medida sin mover el ratón
+                        this.state.ghostP2 = { x: pos.x + 1, y: pos.y }; 
                     } else if (this.state.step === 1) {
-                        this.finishDrawingStep1(pos, evt.shiftKey);
+                        let finalX = pos.x, finalY = pos.y;
+                        
+                        if (evt.shiftKey && (this.state.tool === 'line' || this.state.tool === 'measure')) {
+                            let dx = Math.abs(pos.x - this.state.p1.x); let dy = Math.abs(pos.y - this.state.p1.y);
+                            if (dx > dy) finalY = this.state.p1.y; else finalX = this.state.p1.x;
+                        }
+
+                        if (['parallel', 'perpendicular', 'line_angle'].includes(this.state.tool) && this.state.referenceLine) {
+                            let vx = this.state.referenceLine.x2 - this.state.referenceLine.x1;
+                            let vy = this.state.referenceLine.y2 - this.state.referenceLine.y1;
+                            if (this.state.tool === 'perpendicular') { let t = vx; vx = -vy; vy = t; }
+                            else if (this.state.tool === 'line_angle') {
+                                let a = this.state.customAngle;
+                                let tx = vx * Math.cos(a) - vy * Math.sin(a); let ty = vx * Math.sin(a) + vy * Math.cos(a);
+                                vx = tx; vy = ty;
+                            }
+                            let mag = Math.hypot(vx, vy); let ux = vx / mag, uy = vy / mag;
+                            let dot = (pos.x - this.state.p1.x) * ux + (pos.y - this.state.p1.y) * uy;
+                            finalX = this.state.p1.x + dot * ux; finalY = this.state.p1.y + dot * uy;
+                        }
+
+                        // Evitar finalizar con doble click involuntario en la misma coordenada
+                        if (Math.abs(finalX - this.state.p1.x) < 0.1 && Math.abs(finalY - this.state.p1.y) < 0.1) return;
+
+                        if (this.state.tool === 'measure') {
+                            this.state.p2 = {x: finalX, y: finalY};
+                            this.state.step = 2;
+                            return;
+                        }
+
+                        if (this.state.tool === 'arc') {
+                            let dx = finalX - this.state.p1.x; let dy = finalY - this.state.p1.y;
+                            let mag = Math.hypot(dx, dy); if (mag === 0) { dx = 1; dy = 0; mag = 1; }
+                            this.state.p2 = { x: this.state.p1.x + (dx/mag)*mag, y: this.state.p1.y + (dy/mag)*mag };
+                            this.state.step = 2; 
+                            this.state.keyboardInput = ""; 
+                            this.state.arcStartAngle = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
+                            this.state.arcCurrentAngle = this.state.arcStartAngle;
+                            this.state.arcSweepAngle = 0;
+                            this.forceGhostUpdate();
+                            return; 
+                        }
+
+                        this.saveState(); let sty = this.getStyle();
+
+                        if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
+                            this.data.push({ type: 'line', id: Date.now(), x1: this.state.p1.x, y1: this.state.p1.y, x2: finalX, y2: finalY, style: sty });
+                        } else if (this.state.tool === 'circle') {
+                            let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
+                            this.data.push({ type: 'circle', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, style: sty });
+                        } else if (this.state.tool === 'polygon') {
+                            let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
+                            let sides = parseInt(document.getElementById('prop-poly-sides').value) || 5;
+                            let ang = Math.atan2(finalY - this.state.p1.y, finalX - this.state.p1.x);
+                            this.data.push({ type: 'polygon', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, sides: sides, angle: ang, style: sty });
+                        }
+                        this.cancelAction();
                     } else if (this.state.step === 2 && this.state.tool === 'measure') {
                         let dx = this.state.p2.x - this.state.p1.x, dy = this.state.p2.y - this.state.p1.y;
                         let mag = Math.hypot(dx, dy); let nx = 0, ny = 0; if (mag > 0) { nx = -dy/mag; ny = dx/mag; }
@@ -1432,51 +1497,6 @@
                     }
                     return;
                 }
-            },
-
-            finishDrawingStep1(pos, shiftKey) {
-                let finalX = pos.x, finalY = pos.y;
-                if (shiftKey && (this.state.tool === 'line' || this.state.tool === 'measure')) {
-                    let dx = Math.abs(pos.x - this.state.p1.x); let dy = Math.abs(pos.y - this.state.p1.y);
-                    if (dx > dy) finalY = this.state.p1.y; else finalX = this.state.p1.x;
-                }
-                
-                // Evitamos procesar un doble clic en la misma coordenada exacta (longitud cero)
-                if(finalX === this.state.p1.x && finalY === this.state.p1.y) return;
-
-                if (this.state.tool === 'measure') {
-                    this.state.p2 = {x: finalX, y: finalY};
-                    this.state.step = 2;
-                    return;
-                }
-
-                if (this.state.tool === 'arc') {
-                    let dx = finalX - this.state.p1.x; let dy = finalY - this.state.p1.y;
-                    let mag = Math.hypot(dx, dy); if (mag === 0) { dx = 1; dy = 0; mag = 1; }
-                    this.state.p2 = { x: this.state.p1.x + (dx/mag)*mag, y: this.state.p1.y + (dy/mag)*mag };
-                    this.state.step = 2; 
-                    this.state.keyboardInput = ""; 
-                    this.state.arcStartAngle = Math.atan2(this.state.p2.y - this.state.p1.y, this.state.p2.x - this.state.p1.x);
-                    this.state.arcCurrentAngle = this.state.arcStartAngle;
-                    this.state.arcSweepAngle = 0;
-                    this.forceGhostUpdate();
-                    return; 
-                }
-
-                this.saveState(); let sty = this.getStyle();
-
-                if (['line', 'parallel', 'perpendicular', 'line_angle'].includes(this.state.tool)) {
-                    this.data.push({ type: 'line', id: Date.now(), x1: this.state.p1.x, y1: this.state.p1.y, x2: finalX, y2: finalY, style: sty });
-                } else if (this.state.tool === 'circle') {
-                    let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
-                    this.data.push({ type: 'circle', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, style: sty });
-                } else if (this.state.tool === 'polygon') {
-                    let r = Math.hypot(finalX - this.state.p1.x, finalY - this.state.p1.y);
-                    let sides = parseInt(document.getElementById('prop-poly-sides').value) || 5;
-                    let ang = Math.atan2(finalY - this.state.p1.y, finalX - this.state.p1.x);
-                    this.data.push({ type: 'polygon', id: Date.now(), cx: this.state.p1.x, cy: this.state.p1.y, r: r, sides: sides, angle: ang, style: sty });
-                }
-                this.cancelAction();
             },
 
             getRenderCota(p1x, p1y, p2x, p2y, s, dash, markStyle, distStr, opacity = "1.0", offsetDir = 1) {
@@ -1761,7 +1781,7 @@
                 
                 if (!this.state.isDrawing) return;
                 
-                if (['curve', 'fill'].includes(this.state.tool)) return; 
+                if (['curve', 'fill', 'line', 'measure', 'circle', 'polygon', 'parallel', 'perpendicular', 'line_angle', 'arc'].includes(this.state.tool)) return; 
                 
                 this.state.isDrawing = false;
                 
